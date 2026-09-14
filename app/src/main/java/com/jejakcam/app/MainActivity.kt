@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var zoomText: TextView
     private lateinit var stabilizationText: TextView
     private lateinit var horizonText: TextView
+    private lateinit var exposureText: TextView
     private lateinit var sensorManager: SensorManager
     private var rotationSensor: Sensor? = null
     private var gyroSensor: Sensor? = null
@@ -60,6 +61,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var camera: Camera? = null
     private var zoomRatio = 1f
     private var stabilizationOn = true
+    private var exposureIndex = 0
     private var wideMode = false
     private var recordingStartedAt = 0L
     private val timerHandler = Handler(Looper.getMainLooper())
@@ -178,15 +180,36 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         zoomPanel.addView(minus, LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(zoomPanel, FrameLayout.LayoutParams(dp(62), dp(150), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(14) })
 
-        // Stabilization toggle
-        stabilizationText = textView("STAB  ON", 12f, true).apply {
+        // Stabilization is enabled at the camera/video pipeline when the device supports it.
+        // The button is intentionally informational so it cannot accidentally disable EIS
+        // while riding.
+        stabilizationText = textView("STAB  AUTO", 12f, true).apply {
             background = getDrawable(R.drawable.bg_toggle)
             setOnClickListener {
-                stabilizationOn = !stabilizationOn
-                text = if (stabilizationOn) "STAB  ON" else "STAB  OFF"
+                Toast.makeText(this@MainActivity, "Stabilisasi mengikuti kemampuan kamera HP", Toast.LENGTH_SHORT).show()
             }
         }
-        root.addView(stabilizationText, FrameLayout.LayoutParams(dp(92), dp(38), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(16) })
+        root.addView(stabilizationText, FrameLayout.LayoutParams(dp(108), dp(38), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(16) })
+
+        // Quick exposure controls for changing light while riding.
+        val exposurePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = getDrawable(R.drawable.bg_control)
+        }
+        val exposureMinus = Button(this).apply {
+            text = "−"; textSize = 18f; setTextColor(0xFFFFFFFF.toInt()); background = getDrawable(R.drawable.bg_zoom)
+            setOnClickListener { changeExposure(-1) }
+        }
+        exposureText = textView("EV 0", 11f, true)
+        val exposurePlus = Button(this).apply {
+            text = "+"; textSize = 18f; setTextColor(0xFFFFFFFF.toInt()); background = getDrawable(R.drawable.bg_zoom)
+            setOnClickListener { changeExposure(1) }
+        }
+        exposurePanel.addView(exposureMinus, LinearLayout.LayoutParams(dp(42), dp(42)))
+        exposurePanel.addView(exposureText, LinearLayout.LayoutParams(dp(48), dp(42)))
+        exposurePanel.addView(exposurePlus, LinearLayout.LayoutParams(dp(42), dp(42)))
+        root.addView(exposurePanel, FrameLayout.LayoutParams(dp(140), dp(48), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(10); topMargin = dp(58) })
 
         // Horizon assist: sensor-driven level indicator. The camera/video stabilization
         // remains hardware/device controlled; this indicator helps keep the motorcycle
@@ -230,7 +253,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 try {
                     camera?.cameraControl?.startFocusAndMetering(
                         androidx.camera.core.FocusMeteringAction.Builder(point)
-                            .setAutoCancelDuration(2, TimeUnit.SECONDS)
+                            .setAutoCancelDuration(1, TimeUnit.SECONDS)
                             .build()
                     )
                 } catch (_: Exception) { }
@@ -318,6 +341,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     videoCapture
                 )
                 setZoom(0f)
+                exposureIndex = 0
+                camera?.cameraControl?.setExposureCompensationIndex(0)
+                exposureText.text = "EV 0"
                 statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
             } catch (e: Exception) {
                 // If preview stabilization causes a device-specific HAL error, retry
@@ -340,6 +366,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         videoCapture
                     )
                     setZoom(0f)
+                    exposureIndex = 0
+                    camera?.cameraControl?.setExposureCompensationIndex(0)
+                    exposureText.text = "EV 0"
                     statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
                 } catch (fallbackError: Exception) {
                     Toast.makeText(this, "Kamera gagal dibuka: ${fallbackError.message}", Toast.LENGTH_LONG).show()
@@ -415,6 +444,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         zoomRatio = if (delta == 0f) 1f else (zoomRatio + delta).coerceIn(min, max)
         cam.cameraControl.setZoomRatio(zoomRatio)
         zoomText.text = String.format("%.1f×", zoomRatio)
+    }
+
+    private fun changeExposure(delta: Int) {
+        val cam = camera ?: return
+        val range = cam.cameraInfo.exposureState.exposureCompensationRange
+        exposureIndex = (exposureIndex + delta).coerceIn(range.lower, range.upper)
+        cam.cameraControl.setExposureCompensationIndex(exposureIndex)
+        exposureText.text = if (exposureIndex == 0) "EV 0" else String.format("EV %+d", exposureIndex)
     }
 
     private fun toggleRecording() {
