@@ -66,16 +66,26 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var batteryText: TextView
     private lateinit var gpsText: TextView
     private lateinit var compassText: TextView
+    private lateinit var gpsStatsText: TextView
     private lateinit var pauseButton: TextView
     private var batteryReceiver: BroadcastReceiver? = null
     private lateinit var locationManager: LocationManager
     private var gpsEnabled = false
     private var lastSpeedKmh = 0f
     private var lastGpsAccuracy = 0f
+    private var gpsTrackPoints = mutableListOf<GpsPoint>()
+    private var gpsTrackRecording = false
+    private var gpsDistanceMeters = 0f
+    private var gpsMaxSpeedKmh = 0f
+    private var gpsSpeedSum = 0f
+    private var gpsSpeedSamples = 0
+    private var lastTrackLocation: Location? = null
+    private data class GpsPoint(val timeMs: Long, val latitude: Double, val longitude: Double, val speedKmh: Float, val accuracyM: Float, val bearing: Float)
     private val gpsLocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
             if (location.hasSpeed()) lastSpeedKmh = (location.speed * 3.6f).coerceAtLeast(0f)
             if (location.hasAccuracy()) lastGpsAccuracy = location.accuracy
+            if (gpsTrackRecording && recording != null && !recordingPaused) recordGpsPoint(location)
             updateGpsHud(location)
         }
         override fun onProviderEnabled(provider: String) { updateGpsStatus() }
@@ -278,7 +288,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V27  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V28  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -317,6 +327,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setPadding(dp(8), 0, dp(8), 0)
         }
         hud.addView(compassText, FrameLayout.LayoutParams(dp(104), dp(34), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(106) })
+
+        gpsStatsText = textView("MAX 0 • AVG 0 • 0.0 km", 9f, true).apply {
+            background = getDrawable(R.drawable.bg_chip)
+            setPadding(dp(8), 0, dp(8), 0)
+        }
+        hud.addView(gpsStatsText, FrameLayout.LayoutParams(dp(230), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(132) })
 
         val quickSettings = textView("⚙", 20f, true).apply {
             background = getDrawable(R.drawable.bg_control)
@@ -831,6 +847,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun startSegment() {
         val r = recorder ?: return
+        if (!gpsTrackRecording && gpsEnabled && segmentNumber == 1) beginGpsRecording()
         val pending = r.prepareRecording(this, makeOutputOptions())
         val prepared = if (audioEnabled && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             pending.withAudioEnabled()
@@ -870,6 +887,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         recording = null
                         stoppingForLoop = false
                         stopRequestedByUser = false
+                        finishGpsRecording(saveTrack = true)
                         resetRecordUi()
                     } else if (stoppingForLoop && loopRecordingOn && !stopRequestedByUser) {
                         recording = null
@@ -880,6 +898,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         recording = null
                         stoppingForLoop = false
                         stopRequestedByUser = false
+                        finishGpsRecording(saveTrack = true)
                         resetRecordUi()
                     }
                 }
@@ -970,6 +989,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         recordButton.isEnabled = false
         recordButton.alpha = .45f
         statusText.text = "CAM OFF"
+        gpsStatsText.text = "MAX 0 • AVG 0 • 0.0 km"
     }
 
     private fun toggleRecording() {
@@ -999,6 +1019,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         stoppingForLoop = false
         stopRequestedByUser = false
         recordingPaused = false
+        if (gpsEnabled) resetGpsTrackStats()
         if (countdownSeconds > 0) {
             countdownActive = true
             timerText.text = String.format("00:0%d", countdownSeconds)
@@ -1038,6 +1059,87 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun cardinalDirection(degrees: Float): String {
         val dirs = arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
         return dirs[((degrees + 22.5f) / 45f).toInt() % 8]
+    }
+
+    private fun resetGpsTrackStats() {
+        gpsTrackPoints.clear()
+        gpsDistanceMeters = 0f
+        gpsMaxSpeedKmh = 0f
+        gpsSpeedSum = 0f
+        gpsSpeedSamples = 0
+        lastTrackLocation = null
+        gpsTrackRecording = false
+        if (::gpsStatsText.isInitialized) gpsStatsText.text = "MAX 0 • AVG 0 • 0.0 km"
+    }
+
+    private fun beginGpsRecording() {
+        if (!gpsEnabled) return
+        gpsTrackRecording = true
+        lastTrackLocation = null
+        updateGpsStatsHud()
+    }
+
+    private fun recordGpsPoint(location: Location) {
+        val speed = if (location.hasSpeed()) (location.speed * 3.6f).coerceAtLeast(0f) else lastSpeedKmh
+        val accuracy = if (location.hasAccuracy()) location.accuracy else 0f
+        val bearing = if (location.hasBearing()) location.bearing else 0f
+        val previous = lastTrackLocation
+        if (previous != null && (!location.hasAccuracy() || accuracy <= 80f) && (!previous.hasAccuracy() || previous.accuracy <= 80f)) {
+            gpsDistanceMeters += previous.distanceTo(location).coerceAtLeast(0f)
+        }
+        lastTrackLocation = Location(location)
+        gpsTrackPoints.add(GpsPoint(System.currentTimeMillis(), location.latitude, location.longitude, speed, accuracy, bearing))
+        gpsMaxSpeedKmh = maxOf(gpsMaxSpeedKmh, speed)
+        gpsSpeedSum += speed
+        gpsSpeedSamples++
+        updateGpsStatsHud()
+    }
+
+    private fun updateGpsStatsHud() {
+        if (!::gpsStatsText.isInitialized) return
+        val avg = if (gpsSpeedSamples > 0) gpsSpeedSum / gpsSpeedSamples else 0f
+        gpsStatsText.text = String.format("MAX %.0f • AVG %.0f • %.1f km", gpsMaxSpeedKmh, avg, gpsDistanceMeters / 1000f)
+    }
+
+    private fun finishGpsRecording(saveTrack: Boolean) {
+        if (!gpsTrackRecording) return
+        gpsTrackRecording = false
+        if (saveTrack && gpsTrackPoints.isNotEmpty()) saveGpsTrackCsv()
+        updateGpsStatsHud()
+    }
+
+    private fun saveGpsTrackCsv() {
+        try {
+            val avg = if (gpsSpeedSamples > 0) gpsSpeedSum / gpsSpeedSamples else 0f
+            val sb = StringBuilder()
+            sb.append("timestamp,latitude,longitude,speed_kmh,accuracy_m,bearing_deg\n")
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", java.util.Locale.US)
+            gpsTrackPoints.forEach { point ->
+                sb.append(fmt.format(java.util.Date(point.timeMs))).append(',')
+                    .append(String.format(java.util.Locale.US, "%.7f", point.latitude)).append(',')
+                    .append(String.format(java.util.Locale.US, "%.7f", point.longitude)).append(',')
+                    .append(String.format(java.util.Locale.US, "%.2f", point.speedKmh)).append(',')
+                    .append(String.format(java.util.Locale.US, "%.1f", point.accuracyM)).append(',')
+                    .append(String.format(java.util.Locale.US, "%.1f", point.bearing)).append('\n')
+            }
+            val name = String.format("JejakCam_GPS_%tY%<tm%<td_%<tH%<tM%<tS.csv", java.util.Date())
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, name)
+                put(MediaStore.Downloads.MIME_TYPE, "text/csv")
+                put(MediaStore.Downloads.RELATIVE_PATH, "Download/JejakCam/GPS")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            if (uri != null) {
+                contentResolver.openOutputStream(uri)?.use { it.write(sb.toString().toByteArray(Charsets.UTF_8)) }
+                values.clear()
+                values.put(MediaStore.Downloads.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+                Toast.makeText(this, String.format("GPS track tersimpan • %.1f km • AVG %.0f km/h", gpsDistanceMeters / 1000f, avg), Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Video tersimpan, tetapi GPS track gagal disimpan", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun toggleGps() {
@@ -1080,6 +1182,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         gpsText.text = "GPS OFF"
         lastSpeedKmh = 0f
         lastGpsAccuracy = 0f
+        if (recording == null) resetGpsTrackStats()
     }
 
     private fun updateGpsStatus() {
