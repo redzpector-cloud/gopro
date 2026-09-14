@@ -90,6 +90,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var segmentNumber = 1
     private var stoppingForLoop = false
     private var stopRequestedByUser = false
+    private var selectedQuality = Quality.FHD
+    private var selectedQualityLabel = "1080P"
     private var cameraActive = false
     private var requestedPhotoMode = false
     private val timerHandler = Handler(Looper.getMainLooper())
@@ -233,7 +235,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val topLeft = textView("ACTION", 13f, true).apply { background = getDrawable(R.drawable.bg_chip); setPadding(dp(12),0,dp(12),0) }
         hud.addView(topLeft, FrameLayout.LayoutParams(dp(94), dp(38), Gravity.TOP or Gravity.START).apply { leftMargin=dp(14); topMargin=dp(14) })
 
-        val resolution = textView("1080P  •  30", 13f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0) }
+        val resolution = textView("1080P  •  AUTO", 13f, true).apply {
+            background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0)
+            setOnClickListener {
+                if (recording != null) {
+                    Toast.makeText(this@MainActivity, "Hentikan rekaman untuk mengganti kualitas", Toast.LENGTH_SHORT).show()
+                } else {
+                    cycleVideoQuality()
+                    text = "$selectedQualityLabel  •  AUTO"
+                }
+            }
+        }
         hud.addView(resolution, FrameLayout.LayoutParams(dp(108), dp(38), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(14) })
 
         batteryText = textView("●  --%", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(9),0,dp(9),0) }
@@ -243,7 +255,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background = getDrawable(R.drawable.bg_control)
             setOnClickListener {
                 val info = if (photoMode) "FOTO • 1.0x • EV $exposureIndex"
-                else "VIDEO • FHD 30fps • EIS • ${if (horizonLockOn) "HORIZON ON" else "HORIZON OFF"}"
+                else "VIDEO • $selectedQualityLabel • FPS AUTO • EIS • ${if (horizonLockOn) "HORIZON ON" else "HORIZON OFF"}"
                 Toast.makeText(this@MainActivity, info, Toast.LENGTH_SHORT).show()
             }
         }
@@ -471,8 +483,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 it.surfaceProvider = previewView.surfaceProvider
             }
 
+            // V23: pilih kualitas video yang diminta, dengan fallback aman ke FHD.
+            // FPS tetap AUTO agar mengikuti kemampuan sensor/HAL perangkat.
+            val qualitySelector = QualitySelector.from(
+                listOf(selectedQuality, Quality.FHD, Quality.HD, Quality.SD),
+                FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+            )
             recorder = Recorder.Builder()
-                .setQualitySelector(QualitySelector.from(Quality.FHD))
+                .setQualitySelector(qualitySelector)
                 .build()
 
             val videoBuilder = VideoCapture.Builder(recorder!!)
@@ -748,6 +766,26 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         resetRecordUi()
                     }
                 }
+            }
+        }
+    }
+
+    private fun cycleVideoQuality() {
+        if (photoMode) return
+        selectedQuality = if (selectedQuality == Quality.FHD) Quality.UHD else Quality.FHD
+        selectedQualityLabel = if (selectedQuality == Quality.UHD) "4K" else "1080P"
+        statusText.text = "$selectedQualityLabel • SIAP"
+        Toast.makeText(
+            this,
+            if (selectedQuality == Quality.UHD) "4K dipilih • jika HP tidak mendukung, otomatis turun ke 1080P" else "1080P dipilih",
+            Toast.LENGTH_SHORT
+        ).show()
+        if (cameraActive) {
+            try {
+                ProcessCameraProvider.getInstance(this).get().unbindAll()
+                startCamera(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+            } catch (_: Exception) {
+                Toast.makeText(this, "Kualitas belum dapat diterapkan", Toast.LENGTH_SHORT).show()
             }
         }
     }
