@@ -78,6 +78,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var segmentNumber = 1
     private var stoppingForLoop = false
     private var cameraActive = false
+    private var requestedPhotoMode = false
     private val timerHandler = Handler(Looper.getMainLooper())
     private val timerRunnable = object : Runnable {
         override fun run() {
@@ -96,10 +97,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val audioGranted = result[Manifest.permission.RECORD_AUDIO] == true ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         if (cameraGranted) {
-            startCamera(audioGranted)
+            photoMode = requestedPhotoMode
+            startCamera(!requestedPhotoMode && audioGranted)
         } else {
-            Toast.makeText(this, "Izin kamera diperlukan untuk membuka kamera", Toast.LENGTH_LONG).show()
-            cameraButton.text = "BUKA KAMERA"
+            Toast.makeText(this, "Izin kamera diperlukan", Toast.LENGTH_LONG).show()
+            statusText.text = "CAM OFF"
         }
     }
 
@@ -261,8 +263,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val bottomShade=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL;setPadding(dp(18),dp(10),dp(18),dp(10));background=getDrawable(R.drawable.bg_bottom)}
         val modeRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         val videoMode=textView("VIDEO",12f,true).apply{setPadding(dp(18),0,dp(18),0)}
-        val photoModeView=textView("FOTO",12f,true).apply{alpha=.55f;setPadding(dp(18),0,dp(18),0);setOnClickListener{setPhotoMode(true)}}
-        videoMode.setOnClickListener { setPhotoMode(false) }
+        val photoModeView=textView("FOTO",12f,true).apply{alpha=.55f;setPadding(dp(18),0,dp(18),0);setOnClickListener{activateCameraMode(true)}}
+        videoMode.setOnClickListener { activateCameraMode(false) }
         modeRow.addView(videoMode); modeRow.addView(photoModeView); bottomShade.addView(modeRow,LinearLayout.LayoutParams(-1,dp(30)))
 
         val controls=FrameLayout(this)
@@ -323,12 +325,37 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             Toast.makeText(this, "Kamera sudah aktif", Toast.LENGTH_SHORT).show()
             return
         }
+        // Tombol ini hanya membuka layar GoPro. Hardware kamera tetap OFF.
+        // Kamera baru benar-benar dinyalakan setelah pengguna menekan VIDEO atau FOTO.
+        previewView.visibility = View.VISIBLE
+        cameraScreen.visibility = View.VISIBLE
+        homeScreen.visibility = View.GONE
+        statusText.text = "CAM OFF • PILIH MODE"
+        recordButton.isEnabled = false
+        recordButton.alpha = .45f
+        recordIcon.text = "●"
+        Toast.makeText(this, "Pilih VIDEO untuk menyalakan kamera", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun activateCameraMode(photo: Boolean) {
+        if (recording != null) {
+            Toast.makeText(this, "Hentikan rekaman dulu", Toast.LENGTH_SHORT).show()
+            return
+        }
+        photoMode = photo
+        requestedPhotoMode = photo
+        if (cameraActive) {
+            setPhotoMode(photo)
+            return
+        }
         val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (!cameraGranted || !audioGranted) {
-            permissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+        if (!cameraGranted) {
+            permissions.launch(if (photo) arrayOf(Manifest.permission.CAMERA) else arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+        } else if (!photo && !audioGranted) {
+            permissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
         } else {
-            startCamera(true)
+            startCamera(!photo)
         }
     }
 
