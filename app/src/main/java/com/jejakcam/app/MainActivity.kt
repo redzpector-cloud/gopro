@@ -66,6 +66,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var gyroSensor: Sensor? = null
     private var lastGyroUpdateNs = 0L
     private var gyroMotion = 0f
+    private var filteredRoll = 0f
+    private var filteredPitch = 0f
     private var touchDownX = 0f
     private var touchDownY = 0f
     private var touchDownTime = 0L
@@ -486,7 +488,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             // V23: pilih kualitas video yang diminta, dengan fallback aman ke FHD.
             // FPS tetap AUTO agar mengikuti kemampuan sensor/HAL perangkat.
             val qualitySelector = QualitySelector.from(
-                listOf(selectedQuality, Quality.FHD, Quality.HD, Quality.SD),
+                selectedQuality,
                 FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
             )
             recorder = Recorder.Builder()
@@ -546,6 +548,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 camera?.cameraControl?.setExposureCompensationIndex(0)
                 exposureText.text = "EV 0"
                 statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
+                stabilizationText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) "STAB  HW" else "STAB  AUTO"
             } catch (e: Exception) {
                 // If preview stabilization causes a device-specific HAL error, retry
                 // once without preview stabilization but keep recording stabilization.
@@ -580,6 +583,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     camera?.cameraControl?.setExposureCompensationIndex(0)
                     exposureText.text = "EV 0"
                     statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
+                stabilizationText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) "STAB  HW" else "STAB  AUTO"
                 } catch (fallbackError: Exception) {
                     Toast.makeText(this, "Kamera gagal dibuka: ${fallbackError.message}", Toast.LENGTH_LONG).show()
                 }
@@ -890,7 +894,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 event.values[1] * event.values[1] +
                 event.values[2] * event.values[2]
             )
-            gyroMotion = (gyroMotion * 0.82f + magnitude * 0.18f)
+            gyroMotion = (gyroMotion * 0.90f + magnitude * 0.10f)
             return
         }
 
@@ -906,16 +910,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (pitch > 180f) pitch -= 360f
         if (pitch < -180f) pitch += 360f
 
-        val clamped = roll.coerceIn(-20f, 20f)
+        // Low-pass filtering makes the HUD steadier when the phone is mounted on a vehicle.
+        // This is a live level indicator; actual frame rotation is not performed here.
+        filteredRoll = filteredRoll * 0.88f + roll * 0.12f
+        filteredPitch = filteredPitch * 0.88f + pitch * 0.12f
+        val clamped = filteredRoll.coerceIn(-20f, 20f)
         horizonText.rotation = if (horizonLockOn) -clamped else 0f
-        val level = if (kotlin.math.abs(roll) < 2.5f) "LEVEL" else String.format("%.0f°", roll)
+        val level = if (kotlin.math.abs(filteredRoll) < 2.5f) "LEVEL" else String.format("%+.0f°", filteredRoll)
         val motion = when {
             gyroMotion < 0.25f -> "SMOOTH"
             gyroMotion < 0.8f -> "MOVE"
             else -> "SHAKE"
         }
         horizonText.text = "— $level • $motion —"
-        tiltText.text = String.format("ROLL %+d°  •  PITCH %+d°", roll.roundToInt(), pitch.roundToInt())
+        tiltText.text = String.format("ROLL %+d°  •  PITCH %+d°", filteredRoll.roundToInt(), filteredPitch.roundToInt())
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
