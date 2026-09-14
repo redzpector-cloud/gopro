@@ -302,11 +302,30 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         controls.addView(recordButton,FrameLayout.LayoutParams(dp(84),dp(84),Gravity.CENTER))
         recordIcon=textView("●",29f,true).apply{setTextColor(0xFF111111.toInt());isClickable=false}
         controls.addView(recordIcon,FrameLayout.LayoutParams(dp(84),dp(84),Gravity.CENTER))
-        val flip=textView("0.5×",16f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{toggleWideCamera()}}
+        // V22: GoPro-style lens/zoom presets. 0.5x switches to the widest rear camera
+        // when the device exposes one; the other presets use CameraX digital zoom.
+        val flip=textView("0.5×",16f,true).apply{
+            background=getDrawable(R.drawable.bg_control)
+            setOnClickListener{
+                if (recording != null) { Toast.makeText(this@MainActivity,"Hentikan rekaman sebelum mengganti lensa",Toast.LENGTH_SHORT).show() }
+                else { if (!wideMode) toggleWideCamera() else setZoomToPreset(1f) }
+            }
+        }
         val close=textView("✕",18f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{closeCamera()}}
         hud.addView(close,FrameLayout.LayoutParams(dp(48),dp(48),Gravity.TOP or Gravity.END).apply{rightMargin=dp(14);topMargin=dp(14)})
         controls.addView(flip,FrameLayout.LayoutParams(dp(54),dp(54),Gravity.END or Gravity.CENTER_VERTICAL))
         bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(90)))
+
+        val lensRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
+        fun lensButton(label:String, ratio:Float): TextView = textView(label,10f,true).apply{
+            background=getDrawable(R.drawable.bg_control)
+            setOnClickListener{setLensPreset(ratio)}
+        }
+        lensRow.addView(lensButton("0.5×",0.5f),LinearLayout.LayoutParams(dp(62),dp(34)).apply{rightMargin=dp(4)})
+        lensRow.addView(lensButton("1×",1f),LinearLayout.LayoutParams(dp(62),dp(34)).apply{rightMargin=dp(4)})
+        lensRow.addView(lensButton("2×",2f),LinearLayout.LayoutParams(dp(62),dp(34)).apply{rightMargin=dp(4)})
+        lensRow.addView(lensButton("4×",4f),LinearLayout.LayoutParams(dp(62),dp(34)))
+        bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(38)))
 
         val quickRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         val quick=textView("QUICK REC",10f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{toggleRecording()}}
@@ -608,6 +627,43 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 Toast.makeText(this, "Mode wide tidak tersedia di HP ini", Toast.LENGTH_SHORT).show()
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun setLensPreset(ratio: Float) {
+        if (!cameraActive || camera == null) {
+            Toast.makeText(this, "Pilih VIDEO atau FOTO terlebih dahulu", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (recording != null) {
+            Toast.makeText(this, "Hentikan rekaman sebelum mengganti lensa", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (ratio == 0.5f) {
+            if (!wideMode) toggleWideCamera() else setZoomToPreset(1f)
+        } else {
+            if (wideMode) {
+                wideMode = false
+                val providerFuture = ProcessCameraProvider.getInstance(this)
+                providerFuture.addListener({
+                    try {
+                        providerFuture.get().unbindAll()
+                        startCamera(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                        setZoomToPreset(ratio)
+                    } catch (_: Exception) {
+                        Toast.makeText(this, "Kamera utama tidak tersedia", Toast.LENGTH_SHORT).show()
+                    }
+                }, ContextCompat.getMainExecutor(this))
+            } else setZoomToPreset(ratio)
+        }
+    }
+
+    private fun setZoomToPreset(ratio: Float) {
+        val cam = camera ?: return
+        val min = cam.cameraInfo.zoomState.value?.minZoomRatio ?: 1f
+        val max = cam.cameraInfo.zoomState.value?.maxZoomRatio ?: 4f
+        zoomRatio = ratio.coerceIn(min, max)
+        cam.cameraControl.setZoomRatio(zoomRatio)
+        zoomText.text = String.format("%.1f×", zoomRatio)
     }
 
     private fun setZoom(delta: Float) {
