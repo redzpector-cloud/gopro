@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         noiseSuppressorAvailable = try { android.media.audiofx.NoiseSuppressor.isAvailable() } catch (_: Throwable) { false }
         buildUi()
-        // V15: kamera TIDAK otomatis aktif saat aplikasi dibuka.
+        // V17: kamera TIDAK otomatis aktif saat aplikasi dibuka.
         // Pengguna harus menekan "BUKA KAMERA" terlebih dahulu.
         cameraActive = false
         previewView.visibility = View.GONE
@@ -190,12 +190,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "V15: 1080p 30fps • EIS • Gyro • Loop 3m", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { Toast.makeText(this@MainActivity, "V17: 1080p 30fps • EIS • Gyro • Loop 3m", Toast.LENGTH_SHORT).show() }
         }
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V15  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V17  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -211,6 +211,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         val battery = textView("●  92%", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(9),0,dp(9),0) }
         hud.addView(battery, FrameLayout.LayoutParams(dp(76), dp(38), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(14) })
+
+        val quickSettings = textView("⚙", 20f, true).apply {
+            background = getDrawable(R.drawable.bg_control)
+            setOnClickListener {
+                val info = if (photoMode) "FOTO • 1.0x • EV $exposureIndex"
+                else "VIDEO • FHD 30fps • EIS • ${if (horizonLockOn) "HORIZON ON" else "HORIZON OFF"}"
+                Toast.makeText(this@MainActivity, info, Toast.LENGTH_SHORT).show()
+            }
+        }
+        hud.addView(quickSettings, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(62) })
 
         statusText = textView("READY", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0) }
         hud.addView(statusText, FrameLayout.LayoutParams(dp(96), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(62) })
