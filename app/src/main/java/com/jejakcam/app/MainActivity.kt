@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var stabilizationText: TextView
     private lateinit var horizonText: TextView
     private lateinit var exposureText: TextView
+    private lateinit var tiltText: TextView
     private lateinit var sensorManager: SensorManager
     private var rotationSensor: Sensor? = null
     private var gyroSensor: Sensor? = null
@@ -210,12 +211,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "V19: 1080p 30fps • EIS • Gyro • Swipe Zoom • Loop 3m", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { Toast.makeText(this@MainActivity, "V20: 1080p 30fps • EIS • Gyro • Horizon HUD • Swipe Zoom • Loop 3m", Toast.LENGTH_SHORT).show() }
         }
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V19  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V20  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -249,6 +250,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         horizonText = textView("— LEVEL • SMOOTH —", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.88f }
         hud.addView(horizonText, FrameLayout.LayoutParams(dp(142), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(136) })
+
+        tiltText = textView("ROLL 0°  •  PITCH 0°", 10f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.78f }
+        hud.addView(tiltText, FrameLayout.LayoutParams(dp(150), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(174) })
 
         val horizonToggle = textView("HORIZON ON", 11f, true).apply {
             background=getDrawable(R.drawable.bg_toggle)
@@ -782,8 +786,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val orientation = FloatArray(3)
         SensorManager.getOrientation(matrix, orientation)
         var roll = Math.toDegrees(orientation[2].toDouble()).toFloat()
+        var pitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
         if (roll > 180f) roll -= 360f
         if (roll < -180f) roll += 360f
+        if (pitch > 180f) pitch -= 360f
+        if (pitch < -180f) pitch += 360f
 
         val clamped = roll.coerceIn(-20f, 20f)
         horizonText.rotation = if (horizonLockOn) -clamped else 0f
@@ -794,6 +801,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             else -> "SHAKE"
         }
         horizonText.text = "— $level • $motion —"
+        tiltText.text = String.format("ROLL %+d°  •  PITCH %+d°", roll.roundToInt(), pitch.roundToInt())
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
