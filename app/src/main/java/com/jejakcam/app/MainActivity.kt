@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var stabilizationOn = true
     private var exposureIndex = 0
     private var wideMode = false
+    private var horizonLockOn = true
     private var recordingStartedAt = 0L
     private val timerHandler = Handler(Looper.getMainLooper())
     private val timerRunnable = object : Runnable {
@@ -220,6 +221,22 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             alpha = 0.88f
         }
         root.addView(horizonText, FrameLayout.LayoutParams(dp(120), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(120) })
+
+        // Horizon lock control. This uses the rotation sensor to level the live preview
+        // while the recording itself continues to use the camera's EIS/OIS stabilization.
+        val horizonToggle = textView("HORIZON  ON", 11f, true).apply {
+            background = getDrawable(R.drawable.bg_toggle)
+            setOnClickListener {
+                horizonLockOn = !horizonLockOn
+                text = if (horizonLockOn) "HORIZON  ON" else "HORIZON  OFF"
+                if (!horizonLockOn) {
+                    previewView.rotation = 0f
+                    previewView.scaleX = 1f
+                    previewView.scaleY = 1f
+                }
+            }
+        }
+        root.addView(horizonToggle, FrameLayout.LayoutParams(dp(128), dp(36), Gravity.TOP or Gravity.START).apply { leftMargin = dp(16); topMargin = dp(120) })
 
         // Bottom controls
         val bottom = FrameLayout(this).apply { background = getDrawable(R.drawable.bg_bottom) }
@@ -542,6 +559,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         val clamped = roll.coerceIn(-20f, 20f)
         horizonText.rotation = -clamped
+        if (horizonLockOn) {
+            // Rotate the live preview opposite to the measured roll. A small overscan
+            // avoids exposing black corners while the preview is being leveled.
+            previewView.rotation = -clamped
+            previewView.scaleX = 1.08f
+            previewView.scaleY = 1.08f
+        } else {
+            previewView.rotation = 0f
+            previewView.scaleX = 1f
+            previewView.scaleY = 1f
+        }
         val level = if (kotlin.math.abs(roll) < 2.5f) "LEVEL" else String.format("%.0f°", roll)
         val motion = when {
             gyroMotion < 0.25f -> "SMOOTH"
