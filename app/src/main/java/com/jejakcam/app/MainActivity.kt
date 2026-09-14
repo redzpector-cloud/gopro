@@ -22,6 +22,7 @@ import androidx.camera.core.Camera
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
 import androidx.camera.view.PreviewView
@@ -202,7 +203,7 @@ class MainActivity : ComponentActivity() {
                 try {
                     camera?.cameraControl?.startFocusAndMetering(
                         androidx.camera.core.FocusMeteringAction.Builder(point)
-                            .setAutoCancelDuration(1, TimeUnit.SECONDS)
+                            .setAutoCancelDuration(2, TimeUnit.SECONDS)
                             .build()
                     )
                 } catch (_: Exception) { }
@@ -243,8 +244,20 @@ class MainActivity : ComponentActivity() {
                 .setQualitySelector(QualitySelector.from(Quality.FHD))
                 .build()
 
+            val videoBuilder = VideoCapture.Builder(recorder!!)
+            // Apply continuous video autofocus to the actual recording use case,
+            // not only the preview. This keeps AF tracking active while riding.
+            Camera2Interop.Extender(videoBuilder)
+                .setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AF_MODE,
+                    CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                )
+                .setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AE_MODE,
+                    CameraMetadata.CONTROL_AE_MODE_ON
+                )
             val videoCapture = try {
-                VideoCapture.Builder(recorder!!)
+                videoBuilder
                     .setVideoStabilizationEnabled(true)
                     .build()
             } catch (_: Exception) {
