@@ -22,15 +22,24 @@ class MainActivity : ComponentActivity() {
     private var recorder: Recorder? = null
     private var recording: Recording? = null
     private lateinit var recordButton: Button
-    private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { startCamera() }
+    private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        val cameraGranted = result[Manifest.permission.CAMERA] == true ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (cameraGranted) startCamera()
+        else finish()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         buildUi()
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+        val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (!cameraGranted || !audioGranted) {
             permissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
-        } else startCamera()
+        } else {
+            startCamera()
+        }
     }
 
     private fun buildUi() {
@@ -58,7 +67,11 @@ class MainActivity : ComponentActivity() {
             recorder = Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.FHD)).build()
             val videoCapture = VideoCapture.withOutput(recorder!!)
             provider.unbindAll()
-            provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, videoCapture)
+            try {
+                provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, videoCapture)
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(this, "Kamera gagal dibuka: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
         }, ContextCompat.getMainExecutor(this))
     }
 
