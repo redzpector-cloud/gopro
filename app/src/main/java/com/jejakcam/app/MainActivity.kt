@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.graphics.Color
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -134,14 +135,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(18), dp(14), dp(18), 0)
         }
-        val title = textView("JEJAK CAM", 21f, true)
+        val title = textView("JEJAK CAM", 20f, true).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }
         top.addView(title, LinearLayout.LayoutParams(0, dp(54), 1f))
 
         val resolution = textView("1080p  •  30 FPS", 13f, true).apply {
             background = getDrawable(com.jejakcam.app.R.drawable.bg_chip)
             setPadding(dp(12), dp(5), dp(12), dp(5))
         }
-        top.addView(resolution, LinearLayout.LayoutParams(dp(130), dp(42)).apply { gravity = Gravity.CENTER_VERTICAL })
+        top.addView(resolution, LinearLayout.LayoutParams(dp(138), dp(40)).apply { gravity = Gravity.CENTER_VERTICAL })
         root.addView(top, FrameLayout.LayoutParams(-1, dp(72), Gravity.TOP))
 
         // Recording status
@@ -154,10 +155,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val dot = TextView(this).apply { text = "●"; textSize = 12f; setTextColor(0xFFFFFFFF.toInt()) }
         statusBox.addView(dot, LinearLayout.LayoutParams(dp(18), -1))
         statusText = textView("READY", 12f, true)
-        statusBox.addView(statusText, LinearLayout.LayoutParams(dp(58), -1))
+        statusBox.addView(statusText, LinearLayout.LayoutParams(dp(50), -1))
         timerText = textView("00:00", 12f, true)
-        statusBox.addView(timerText, LinearLayout.LayoutParams(dp(52), -1))
-        root.addView(statusBox, FrameLayout.LayoutParams(dp(132), dp(36), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(76) })
+        statusBox.addView(timerText, LinearLayout.LayoutParams(dp(50), -1))
+        root.addView(statusBox, FrameLayout.LayoutParams(dp(124), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(76) })
 
         // Vertical zoom controls
         val zoomPanel = LinearLayout(this).apply {
@@ -189,7 +190,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 Toast.makeText(this@MainActivity, "Stabilisasi mengikuti kemampuan kamera HP", Toast.LENGTH_SHORT).show()
             }
         }
-        root.addView(stabilizationText, FrameLayout.LayoutParams(dp(108), dp(38), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(16) })
+        root.addView(stabilizationText, FrameLayout.LayoutParams(dp(112), dp(38), Gravity.END or Gravity.TOP).apply { rightMargin = dp(16); topMargin = dp(76) })
 
         // Quick exposure controls for changing light while riding.
         val exposurePanel = LinearLayout(this).apply {
@@ -209,7 +210,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         exposurePanel.addView(exposureMinus, LinearLayout.LayoutParams(dp(42), dp(42)))
         exposurePanel.addView(exposureText, LinearLayout.LayoutParams(dp(48), dp(42)))
         exposurePanel.addView(exposurePlus, LinearLayout.LayoutParams(dp(42), dp(42)))
-        root.addView(exposurePanel, FrameLayout.LayoutParams(dp(140), dp(48), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(10); topMargin = dp(58) })
+        root.addView(exposurePanel, FrameLayout.LayoutParams(dp(140), dp(48), Gravity.START or Gravity.BOTTOM).apply { leftMargin = dp(14); bottomMargin = dp(170) })
 
         // Horizon assist: sensor-driven level indicator. The camera/video stabilization
         // remains hardware/device controlled; this indicator helps keep the motorcycle
@@ -218,12 +219,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background = getDrawable(R.drawable.bg_chip)
             alpha = 0.88f
         }
-        root.addView(horizonText, FrameLayout.LayoutParams(dp(120), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(118) })
+        root.addView(horizonText, FrameLayout.LayoutParams(dp(120), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(120) })
 
         // Bottom controls
         val bottom = FrameLayout(this).apply { background = getDrawable(R.drawable.bg_bottom) }
         val hint = textView("Tap untuk fokus  •  Rekam video teknisi", 12f).apply { alpha = 0.78f }
-        bottom.addView(hint, FrameLayout.LayoutParams(-1, dp(30), Gravity.TOP).apply { topMargin = dp(8) })
+        bottom.addView(hint, FrameLayout.LayoutParams(-1, dp(30), Gravity.TOP).apply { topMargin = dp(7) })
 
         recordButton = Button(this).apply {
             text = ""
@@ -231,20 +232,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             elevation = dp(8).toFloat()
             setOnClickListener { toggleRecording() }
         }
-        bottom.addView(recordButton, FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER).apply { topMargin = dp(22) })
+        bottom.addView(recordButton, FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER).apply { topMargin = dp(28) })
 
         recordIcon = textView("●", 30f, true).apply { setTextColor(0xFF111111.toInt()); isClickable = false }
-        bottom.addView(recordIcon, FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER).apply { topMargin = dp(22) })
+        bottom.addView(recordIcon, FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER).apply { topMargin = dp(28) })
 
         val gallery = textView("▣", 26f).apply { background = getDrawable(R.drawable.bg_control) }
         gallery.setOnClickListener { Toast.makeText(this, "Video tersimpan otomatis di Galeri", Toast.LENGTH_SHORT).show() }
-        bottom.addView(gallery, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(28); topMargin = dp(18) })
+        bottom.addView(gallery, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(28); topMargin = dp(26) })
 
         val flip = textView("0.5×", 18f, true).apply { background = getDrawable(R.drawable.bg_control) }
         flip.setOnClickListener { toggleWideCamera() }
-        bottom.addView(flip, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(28); topMargin = dp(18) })
+        bottom.addView(flip, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(28); topMargin = dp(26) })
 
-        root.addView(bottom, FrameLayout.LayoutParams(-1, dp(155), Gravity.BOTTOM))
+        root.addView(bottom, FrameLayout.LayoutParams(-1, dp(164), Gravity.BOTTOM))
         setContentView(root)
 
         previewView.setOnTouchListener { _, event ->
