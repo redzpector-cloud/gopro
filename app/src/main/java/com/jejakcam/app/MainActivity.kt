@@ -65,7 +65,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var exposureIndex = 0
     private var wideMode = false
     private var horizonLockOn = true
+    private var loopRecordingOn = true
+    private var loopDurationMs = 3 * 60 * 1000L
     private var recordingStartedAt = 0L
+    private var segmentNumber = 1
+    private var stoppingForLoop = false
     private val timerHandler = Handler(Looper.getMainLooper())
     private val timerRunnable = object : Runnable {
         override fun run() {
@@ -222,21 +226,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         root.addView(horizonText, FrameLayout.LayoutParams(dp(120), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(120) })
 
-        // Horizon lock control. This uses the rotation sensor to level the live preview
-        // while the recording itself continues to use the camera's EIS/OIS stabilization.
-        val horizonToggle = textView("HORIZON  ON", 11f, true).apply {
+        val horizonToggle = textView("HORIZON ON", 11f, true).apply {
             background = getDrawable(R.drawable.bg_toggle)
             setOnClickListener {
                 horizonLockOn = !horizonLockOn
-                text = if (horizonLockOn) "HORIZON  ON" else "HORIZON  OFF"
-                if (!horizonLockOn) {
-                    previewView.rotation = 0f
-                    previewView.scaleX = 1f
-                    previewView.scaleY = 1f
-                }
+                text = if (horizonLockOn) "HORIZON ON" else "HORIZON OFF"
+                Toast.makeText(this@MainActivity, if (horizonLockOn) "Horizon Lock aktif" else "Horizon Lock nonaktif", Toast.LENGTH_SHORT).show()
             }
         }
-        root.addView(horizonToggle, FrameLayout.LayoutParams(dp(128), dp(36), Gravity.TOP or Gravity.START).apply { leftMargin = dp(16); topMargin = dp(120) })
+        root.addView(horizonToggle, FrameLayout.LayoutParams(dp(112), dp(36), Gravity.START or Gravity.TOP).apply { leftMargin = dp(14); topMargin = dp(76) })
 
         // Bottom controls
         val bottom = FrameLayout(this).apply { background = getDrawable(R.drawable.bg_bottom) }
@@ -261,6 +259,22 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val flip = textView("0.5×", 18f, true).apply { background = getDrawable(R.drawable.bg_control) }
         flip.setOnClickListener { toggleWideCamera() }
         bottom.addView(flip, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(28); topMargin = dp(26) })
+
+        val quickRec = textView("QUICK", 11f, true).apply {
+            background = getDrawable(R.drawable.bg_control)
+            setOnClickListener { toggleRecording() }
+        }
+        bottom.addView(quickRec, FrameLayout.LayoutParams(dp(64), dp(44), Gravity.START or Gravity.BOTTOM).apply { leftMargin = dp(88); bottomMargin = dp(16) })
+
+        val loopButton = textView("LOOP 3m", 10f, true).apply {
+            background = getDrawable(R.drawable.bg_control)
+            setOnClickListener {
+                loopRecordingOn = !loopRecordingOn
+                text = if (loopRecordingOn) "LOOP 3m" else "LOOP OFF"
+                Toast.makeText(this@MainActivity, if (loopRecordingOn) "Loop Recording aktif • 3 menit" else "Loop Recording nonaktif", Toast.LENGTH_SHORT).show()
+            }
+        }
+        bottom.addView(loopButton, FrameLayout.LayoutParams(dp(72), dp(44), Gravity.END or Gravity.BOTTOM).apply { rightMargin = dp(88); bottomMargin = dp(16) })
 
         root.addView(bottom, FrameLayout.LayoutParams(-1, dp(164), Gravity.BOTTOM))
         setContentView(root)
@@ -472,49 +486,82 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         exposureText.text = if (exposureIndex == 0) "EV 0" else String.format("EV %+d", exposureIndex)
     }
 
-    private fun toggleRecording() {
-        val r = recorder ?: return
-        if (recording != null) {
-            recording?.stop()
-            recording = null
-            timerHandler.removeCallbacks(timerRunnable)
-            timerText.text = "00:00"
-            statusText.text = "READY"
-            recordButton.background = getDrawable(R.drawable.bg_record)
-            recordIcon.text = "●"
-            recordIcon.setTextColor(0xFF111111.toInt())
-            return
-        }
-
-        val name = "JejakCam_${System.currentTimeMillis()}.mp4"
+    private fun makeOutputOptions(): MediaStoreOutputOptions {
+        val name = String.format("JejakCam_%tY%<tm%<td_%<tH%<tM%<tS_S%02d.mp4", java.util.Date(), segmentNumber)
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, name)
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/JejakCam")
         }
-        val options = MediaStoreOutputOptions.Builder(contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+        return MediaStoreOutputOptions.Builder(contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
             .setContentValues(values).build()
+    }
 
-        val pending = r.prepareRecording(this, options)
+    private fun resetRecordUi() {
+        timerHandler.removeCallbacks(timerRunnable)
+        timerText.text = "00:00"
+        statusText.text = "READY"
+        recordButton.background = getDrawable(R.drawable.bg_record)
+        recordIcon.text = "●"
+        recordIcon.setTextColor(0xFF111111.toInt())
+    }
+
+    private fun startSegment() {
+        val r = recorder ?: return
+        val pending = r.prepareRecording(this, makeOutputOptions())
         val prepared = if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             pending.withAudioEnabled()
         } else pending
-
         recording = prepared.start(ContextCompat.getMainExecutor(this)) { event ->
             when (event) {
                 is VideoRecordEvent.Start -> {
                     recordingStartedAt = System.currentTimeMillis()
-                    statusText.text = "REC"
+                    statusText.text = if (loopRecordingOn) "REC • LOOP" else "REC"
+                    timerHandler.removeCallbacks(timerRunnable)
                     timerHandler.post(timerRunnable)
                     recordButton.background = getDrawable(R.drawable.bg_record_active)
                     recordIcon.text = "■"
                     recordIcon.setTextColor(0xFFFFFFFF.toInt())
+                    if (loopRecordingOn) {
+                        timerHandler.postDelayed({
+                            if (recording != null && !stoppingForLoop && loopRecordingOn) {
+                                stoppingForLoop = true
+                                recording?.stop()
+                            }
+                        }, loopDurationMs)
+                    }
                 }
                 is VideoRecordEvent.Finalize -> {
-                    if (event.hasError()) Toast.makeText(this, "Gagal menyimpan video: ${event.error}", Toast.LENGTH_LONG).show()
+                    if (event.hasError()) {
+                        Toast.makeText(this, "Gagal menyimpan video: ${event.error}", Toast.LENGTH_LONG).show()
+                        recording = null
+                        stoppingForLoop = false
+                        resetRecordUi()
+                    } else if (stoppingForLoop && loopRecordingOn) {
+                        recording = null
+                        segmentNumber++
+                        stoppingForLoop = false
+                        startSegment()
+                    } else {
+                        recording = null
+                        resetRecordUi()
+                    }
                 }
             }
         }
+    }
+
+    private fun toggleRecording() {
+        if (recording != null) {
+            stoppingForLoop = false
+            recording?.stop()
+            recording = null
+            resetRecordUi()
+            return
+        }
+        segmentNumber = 1
+        stoppingForLoop = false
+        startSegment()
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
@@ -558,18 +605,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (roll < -180f) roll += 360f
 
         val clamped = roll.coerceIn(-20f, 20f)
-        horizonText.rotation = -clamped
-        if (horizonLockOn) {
-            // Rotate the live preview opposite to the measured roll. A small overscan
-            // avoids exposing black corners while the preview is being leveled.
-            previewView.rotation = -clamped
-            previewView.scaleX = 1.08f
-            previewView.scaleY = 1.08f
-        } else {
-            previewView.rotation = 0f
-            previewView.scaleX = 1f
-            previewView.scaleY = 1f
-        }
+        horizonText.rotation = if (horizonLockOn) -clamped else 0f
         val level = if (kotlin.math.abs(roll) < 2.5f) "LEVEL" else String.format("%.0f°", roll)
         val motion = when {
             gyroMotion < 0.25f -> "SMOOTH"
