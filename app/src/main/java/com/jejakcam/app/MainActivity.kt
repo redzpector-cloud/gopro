@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.view.ScaleGestureDetector
 import android.graphics.Color
 import android.widget.Button
 import android.widget.FrameLayout
@@ -59,6 +60,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var gyroSensor: Sensor? = null
     private var lastGyroUpdateNs = 0L
     private var gyroMotion = 0f
+    private var touchDownX = 0f
+    private var touchDownY = 0f
+    private var touchDownTime = 0L
+    private var swipeZooming = false
+    private lateinit var scaleDetector: ScaleGestureDetector
 
     private var recorder: Recorder? = null
     private var recording: Recording? = null
@@ -113,6 +119,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         noiseSuppressorAvailable = try { android.media.audiofx.NoiseSuppressor.isAvailable() } catch (_: Throwable) { false }
+        scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                if (!cameraActive || recording != null) return true
+                val cam = camera ?: return true
+                val max = cam.cameraInfo.zoomState.value?.maxZoomRatio ?: 4f
+                val min = cam.cameraInfo.zoomState.value?.minZoomRatio ?: 1f
+                zoomRatio = (zoomRatio * detector.scaleFactor).coerceIn(min, max)
+                cam.cameraControl.setZoomRatio(zoomRatio)
+                zoomText.text = String.format("%.1f×", zoomRatio)
+                return true
+            }
+        })
         buildUi()
         // V17: kamera TIDAK otomatis aktif saat aplikasi dibuka.
         // Pengguna harus menekan "BUKA KAMERA" terlebih dahulu.
@@ -192,12 +210,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "V17: 1080p 30fps • EIS • Gyro • Loop 3m", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { Toast.makeText(this@MainActivity, "V19: 1080p 30fps • EIS • Gyro • Swipe Zoom • Loop 3m", Toast.LENGTH_SHORT).show() }
         }
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V17  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V19  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -292,13 +310,39 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         setContentView(root)
 
         previewView.setOnTouchListener { _, event ->
-            if (event.action == android.view.MotionEvent.ACTION_UP) {
-                val point = previewView.meteringPointFactory.createPoint(event.x, event.y)
-                try { camera?.cameraControl?.startFocusAndMetering(
-                    androidx.camera.core.FocusMeteringAction.Builder(point).setAutoCancelDuration(1, TimeUnit.SECONDS).build()
-                ) } catch (_: Exception) { }
+            scaleDetector.onTouchEvent(event)
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    touchDownX = event.x
+                    touchDownY = event.y
+                    touchDownTime = System.currentTimeMillis()
+                    swipeZooming = event.x > previewView.width * 0.70f
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    if (swipeZooming && cameraActive && recording == null && !scaleDetector.isInProgress) {
+                        val dy = touchDownY - event.y
+                        if (kotlin.math.abs(dy) > dp(8)) {
+                            setZoom(dy / (previewView.height.coerceAtLeast(1) / 5f))
+                            touchDownY = event.y
+                        }
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    val duration = System.currentTimeMillis() - touchDownTime
+                    val moved = kotlin.math.abs(event.x - touchDownX) + kotlin.math.abs(event.y - touchDownY)
+                    if (!swipeZooming && duration < 300 && moved < dp(18)) {
+                        val point = previewView.meteringPointFactory.createPoint(event.x, event.y)
+                        try { camera?.cameraControl?.startFocusAndMetering(
+                            androidx.camera.core.FocusMeteringAction.Builder(point).setAutoCancelDuration(1, TimeUnit.SECONDS).build()
+                        ) } catch (_: Exception) { }
+                    }
+                    swipeZooming = false
+                    true
+                }
+                else -> true
             }
-            true
         }
 
         // Keep the camera screen hidden until the user explicitly opens the camera.
