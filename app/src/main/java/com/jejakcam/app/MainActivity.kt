@@ -51,6 +51,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var horizonText: TextView
     private lateinit var sensorManager: SensorManager
     private var rotationSensor: Sensor? = null
+    private var gyroSensor: Sensor? = null
+    private var lastGyroUpdateNs = 0L
+    private var gyroMotion = 0f
 
     private var recorder: Recorder? = null
     private var recording: Recording? = null
@@ -85,6 +88,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         buildUi()
         val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -187,7 +191,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         // Horizon assist: sensor-driven level indicator. The camera/video stabilization
         // remains hardware/device controlled; this indicator helps keep the motorcycle
         // mount level while recording.
-        horizonText = textView("—  LEVEL  —", 12f, true).apply {
+        horizonText = textView("— LEVEL • GYRO —", 12f, true).apply {
             background = getDrawable(R.drawable.bg_chip)
             alpha = 0.88f
         }
@@ -232,6 +236,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 } catch (_: Exception) { }
             }
             true
+        }
+    }
+
+    private fun supportsVideoStabilization(cameraInfo: CameraInfo): Boolean {
+        return try {
+            val modes = Camera2CameraInfo.from(cameraInfo)
+                .getCameraCharacteristic(
+                    android.hardware.camera2.CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES
+                )
+            modes?.contains(CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON) == true
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -302,7 +318,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     videoCapture
                 )
                 setZoom(0f)
-                statusText.text = if (wideMode) "WIDE • STAB" else "ACTION • STAB"
+                statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
             } catch (e: Exception) {
                 // If preview stabilization causes a device-specific HAL error, retry
                 // once without preview stabilization but keep recording stabilization.
@@ -324,7 +340,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         videoCapture
                     )
                     setZoom(0f)
-                    statusText.text = if (wideMode) "WIDE • STAB" else "ACTION • STAB"
+                    statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
                 } catch (fallbackError: Exception) {
                     Toast.makeText(this, "Kamera gagal dibuka: ${fallbackError.message}", Toast.LENGTH_LONG).show()
                 }
@@ -368,6 +384,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun toggleWideCamera() {
+        if (recording != null) {
+            Toast.makeText(this, "Hentikan rekaman sebelum mengganti kamera", Toast.LENGTH_SHORT).show()
+            return
+        }
         wideMode = !wideMode
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener({
@@ -452,6 +472,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onResume() {
         super.onResume()
         rotationSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+        gyroSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
     }
 
     override fun onPause() {
@@ -460,6 +481,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type == Sensor.TYPE_GYROSCOPE) {
+            // Motion indicator only. Actual frame correction is left to the camera's
+            // hardware/CameraX video stabilization so we do not distort the recording.
+            val magnitude = kotlin.math.sqrt(
+                event.values[0] * event.values[0] +
+                event.values[1] * event.values[1] +
+                event.values[2] * event.values[2]
+            )
+            gyroMotion = (gyroMotion * 0.82f + magnitude * 0.18f)
+            return
+        }
+
         if (event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
         val matrix = FloatArray(9)
         SensorManager.getRotationMatrixFromVector(matrix, event.values)
@@ -468,9 +501,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         var roll = Math.toDegrees(orientation[2].toDouble()).toFloat()
         if (roll > 180f) roll -= 360f
         if (roll < -180f) roll += 360f
+
         val clamped = roll.coerceIn(-20f, 20f)
         horizonText.rotation = -clamped
-        horizonText.text = if (kotlin.math.abs(roll) < 2.5f) "—  LEVEL  —" else String.format("—  %.0f°  —", roll)
+        val level = if (kotlin.math.abs(roll) < 2.5f) "LEVEL" else String.format("%.0f°", roll)
+        val motion = when {
+            gyroMotion < 0.25f -> "SMOOTH"
+            gyroMotion < 0.8f -> "MOVE"
+            else -> "SHAKE"
+        }
+        horizonText.text = "— $level • $motion —"
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
