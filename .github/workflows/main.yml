@@ -1,0 +1,9 @@
+JejakCam/
+├── app/
+├── gradle/
+├── .github/
+│   └── workflows/
+│       └── build-apk.yml
+├── build.gradle.kts
+├── settings.gradle.kts
+└── gradlew
