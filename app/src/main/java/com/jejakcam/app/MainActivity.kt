@@ -26,6 +26,8 @@ import androidx.camera.core.CameraFilter
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.Preview
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
@@ -60,6 +62,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private var recorder: Recorder? = null
     private var recording: Recording? = null
+    private var imageCapture: ImageCapture? = null
+    private var photoMode = false
     private var camera: Camera? = null
     private var zoomRatio = 1f
     private var stabilizationOn = true
@@ -247,8 +251,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val bottomShade=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL;setPadding(dp(18),dp(10),dp(18),dp(10));background=getDrawable(R.drawable.bg_bottom)}
         val modeRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         val videoMode=textView("VIDEO",12f,true).apply{setPadding(dp(18),0,dp(18),0)}
-        val photoMode=textView("FOTO",12f,true).apply{alpha=.55f;setPadding(dp(18),0,dp(18),0);setOnClickListener{Toast.makeText(this@MainActivity,"Mode foto siap untuk V15.1",Toast.LENGTH_SHORT).show()}}
-        modeRow.addView(videoMode); modeRow.addView(photoMode); bottomShade.addView(modeRow,LinearLayout.LayoutParams(-1,dp(30)))
+        val photoModeView=textView("FOTO",12f,true).apply{alpha=.55f;setPadding(dp(18),0,dp(18),0);setOnClickListener{setPhotoMode(true)}}
+        videoMode.setOnClickListener { setPhotoMode(false) }
+        modeRow.addView(videoMode); modeRow.addView(photoModeView); bottomShade.addView(modeRow,LinearLayout.LayoutParams(-1,dp(30)))
 
         val controls=FrameLayout(this)
         val gallery=textView("▣",25f).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{Toast.makeText(this@MainActivity,"Galeri JejakCam",Toast.LENGTH_SHORT).show()}}
@@ -258,6 +263,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         recordIcon=textView("●",29f,true).apply{setTextColor(0xFF111111.toInt());isClickable=false}
         controls.addView(recordIcon,FrameLayout.LayoutParams(dp(84),dp(84),Gravity.CENTER))
         val flip=textView("0.5×",16f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{toggleWideCamera()}}
+        val close=textView("✕",18f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{closeCamera()}}
+        hud.addView(close,FrameLayout.LayoutParams(dp(48),dp(48),Gravity.TOP or Gravity.END).apply{rightMargin=dp(14);topMargin=dp(14)})
         controls.addView(flip,FrameLayout.LayoutParams(dp(54),dp(54),Gravity.END or Gravity.CENTER_VERTICAL))
         bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(90)))
 
@@ -373,13 +380,19 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 VideoCapture.withOutput(recorder!!)
             }
 
+            val image = ImageCapture.Builder()
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .build()
+            imageCapture = image
+
             provider.unbindAll()
             try {
                 camera = provider.bindToLifecycle(
                     this,
                     currentCameraSelector(),
                     preview,
-                    videoCapture
+                    videoCapture,
+                    image
                 )
                 cameraActive = true
                 previewView.visibility = View.VISIBLE
@@ -412,7 +425,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         this,
                         currentCameraSelector(),
                         fallbackPreview,
-                        videoCapture
+                        videoCapture,
+                        image
                     )
                     cameraActive = true
                     previewView.visibility = View.VISIBLE
@@ -576,9 +590,66 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
+    private fun setPhotoMode(enabled: Boolean) {
+        if (!cameraActive) return
+        if (recording != null) {
+            Toast.makeText(this, "Hentikan rekaman dulu", Toast.LENGTH_SHORT).show()
+            return
+        }
+        photoMode = enabled
+        recordIcon.text = if (enabled) "○" else "●"
+        statusText.text = if (enabled) "PHOTO READY" else "READY"
+        recordButton.background = getDrawable(R.drawable.bg_record)
+        Toast.makeText(this, if (enabled) "Mode FOTO" else "Mode VIDEO", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun capturePhoto() {
+        val capture = imageCapture ?: return
+        val name = String.format("JejakCam_%tY%<tm%<td_%<tH%<tM%<tS.jpg", java.util.Date())
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, name)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/JejakCam")
+        }
+        val output = ImageCapture.OutputFileOptions.Builder(contentResolver, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values).build()
+        capture.takePicture(output, ContextCompat.getMainExecutor(this), object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                statusText.text = "PHOTO SAVED"
+                Toast.makeText(this@MainActivity, "Foto tersimpan di Galeri > Pictures > JejakCam", Toast.LENGTH_SHORT).show()
+            }
+            override fun onError(exception: ImageCaptureException) {
+                Toast.makeText(this@MainActivity, "Gagal mengambil foto: ${exception.message}", Toast.LENGTH_LONG).show()
+            }
+        })
+    }
+
+    private fun closeCamera() {
+        if (recording != null) {
+            Toast.makeText(this, "Hentikan rekaman terlebih dahulu", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try { ProcessCameraProvider.getInstance(this).get().unbindAll() } catch (_: Exception) {}
+        camera = null
+        recorder = null
+        imageCapture = null
+        cameraActive = false
+        previewView.visibility = View.GONE
+        cameraScreen.visibility = View.GONE
+        homeScreen.visibility = View.VISIBLE
+        cameraButton.text = "▶   BUKA KAMERA"
+        cameraButton.alpha = 1f
+        recordButton.isEnabled = false
+        recordButton.alpha = .45f
+        statusText.text = "CAM OFF"
+    }
+
     private fun toggleRecording() {
         if (!cameraActive || recorder == null) {
             Toast.makeText(this, "Tekan BUKA KAMERA terlebih dahulu", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (photoMode) {
+            capturePhoto()
             return
         }
         if (recording != null) {
