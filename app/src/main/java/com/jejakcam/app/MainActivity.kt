@@ -21,6 +21,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.CameraFilter
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.core.CameraInfo
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -46,6 +49,7 @@ class MainActivity : ComponentActivity() {
     private var camera: Camera? = null
     private var zoomRatio = 1f
     private var stabilizationOn = true
+    private var wideMode = false
     private var recordingStartedAt = 0L
     private val timerHandler = Handler(Looper.getMainLooper())
     private val timerRunnable = object : Runnable {
@@ -190,8 +194,8 @@ class MainActivity : ComponentActivity() {
         gallery.setOnClickListener { Toast.makeText(this, "Video tersimpan otomatis di Galeri", Toast.LENGTH_SHORT).show() }
         bottom.addView(gallery, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(28); topMargin = dp(18) })
 
-        val flip = textView("↻", 28f).apply { background = getDrawable(R.drawable.bg_control) }
-        flip.setOnClickListener { Toast.makeText(this, "Kamera depan/belakang akan ditambahkan berikutnya", Toast.LENGTH_SHORT).show() }
+        val flip = textView("0.5×", 18f, true).apply { background = getDrawable(R.drawable.bg_control) }
+        flip.setOnClickListener { toggleWideCamera() }
         bottom.addView(flip, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(28); topMargin = dp(18) })
 
         root.addView(bottom, FrameLayout.LayoutParams(-1, dp(155), Gravity.BOTTOM))
@@ -270,12 +274,12 @@ class MainActivity : ComponentActivity() {
             try {
                 camera = provider.bindToLifecycle(
                     this,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    currentCameraSelector(),
                     preview,
                     videoCapture
                 )
                 setZoom(0f)
-                statusText.text = if (withAudio) "ACTION • STAB" else "ACTION • VIDEO"
+                statusText.text = if (wideMode) "WIDE • STAB" else "ACTION • STAB"
             } catch (e: Exception) {
                 // If preview stabilization causes a device-specific HAL error, retry
                 // once without preview stabilization but keep recording stabilization.
@@ -292,15 +296,71 @@ class MainActivity : ComponentActivity() {
                     }
                     camera = provider.bindToLifecycle(
                         this,
-                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        currentCameraSelector(),
                         fallbackPreview,
                         videoCapture
                     )
                     setZoom(0f)
-                    statusText.text = if (withAudio) "ACTION • STAB" else "ACTION • VIDEO"
+                    statusText.text = if (wideMode) "WIDE • STAB" else "ACTION • STAB"
                 } catch (fallbackError: Exception) {
                     Toast.makeText(this, "Kamera gagal dibuka: ${fallbackError.message}", Toast.LENGTH_LONG).show()
                 }
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    /**
+     * Prefer the widest rear physical camera exposed by CameraX when Wide mode is on.
+     * Many phones expose 0.5x as a separate camera ID; devices that do not expose one
+     * safely fall back to the normal rear camera.
+     */
+    private fun currentCameraSelector(): CameraSelector {
+        if (!wideMode) return CameraSelector.DEFAULT_BACK_CAMERA
+        return try {
+            CameraSelector.Builder()
+                .addCameraFilter(object : CameraFilter {
+                    override fun filter(cameraInfos: MutableList<CameraInfo>): MutableList<CameraInfo> {
+                        val candidates = cameraInfos.filter { info ->
+                            try {
+                                val facing = Camera2CameraInfo.from(info)
+                                    .getCameraCharacteristic(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
+                                facing == CameraMetadata.LENS_FACING_BACK
+                            } catch (_: Exception) { false }
+                        }
+                        if (candidates.isEmpty()) return mutableListOf()
+                        val widest = candidates.minByOrNull { info ->
+                            try {
+                                val focals = Camera2CameraInfo.from(info)
+                                    .getCameraCharacteristic(android.hardware.camera2.CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                                focals?.minOrNull() ?: Float.MAX_VALUE
+                            } catch (_: Exception) { Float.MAX_VALUE }
+                        }
+                        return if (widest != null) mutableListOf(widest) else mutableListOf()
+                    }
+                })
+                .build()
+        } catch (_: Exception) {
+            CameraSelector.DEFAULT_BACK_CAMERA
+        }
+    }
+
+    private fun toggleWideCamera() {
+        wideMode = !wideMode
+        val providerFuture = ProcessCameraProvider.getInstance(this)
+        providerFuture.addListener({
+            val provider = providerFuture.get()
+            try {
+                provider.unbindAll()
+                // Rebuild through startCamera so the same AF/stabilization settings apply.
+                startCamera(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                Toast.makeText(
+                    this,
+                    if (wideMode) "WIDE / ULTRA-WIDE aktif" else "KAMERA UTAMA aktif",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                wideMode = !wideMode
+                Toast.makeText(this, "Mode wide tidak tersedia di HP ini", Toast.LENGTH_SHORT).show()
             }
         }, ContextCompat.getMainExecutor(this))
     }
