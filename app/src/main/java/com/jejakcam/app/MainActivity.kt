@@ -44,6 +44,7 @@ import android.widget.ImageView
 class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var previewView: PreviewView
     private lateinit var recordButton: Button
+    private lateinit var cameraButton: Button
     private lateinit var recordIcon: TextView
     private lateinit var timerText: TextView
     private lateinit var statusText: TextView
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var noiseSuppressorAvailable = false
     private var segmentNumber = 1
     private var stoppingForLoop = false
+    private var cameraActive = false
     private val timerHandler = Handler(Looper.getMainLooper())
     private val timerRunnable = object : Runnable {
         override fun run() {
@@ -89,7 +91,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val audioGranted = result[Manifest.permission.RECORD_AUDIO] == true ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (cameraGranted) startCamera(audioGranted) else finish()
+        if (cameraGranted) {
+            startCamera(audioGranted)
+        } else {
+            Toast.makeText(this, "Izin kamera diperlukan untuk membuka kamera", Toast.LENGTH_LONG).show()
+            cameraButton.text = "BUKA KAMERA"
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,13 +108,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         noiseSuppressorAvailable = try { android.media.audiofx.NoiseSuppressor.isAvailable() } catch (_: Throwable) { false }
         buildUi()
-        val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (!cameraGranted || !audioGranted) {
-            permissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
-        } else {
-            startCamera(true)
-        }
+        // V15: kamera TIDAK otomatis aktif saat aplikasi dibuka.
+        // Pengguna harus menekan "BUKA KAMERA" terlebih dahulu.
+        cameraActive = false
+        statusText.text = "CAM OFF"
+        cameraButton.text = "BUKA KAMERA"
+        recordButton.isEnabled = false
+        recordButton.alpha = 0.45f
     }
 
     private fun hideSystemBars() {
@@ -255,16 +262,26 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val hint = textView("Tap untuk fokus  •  Rekam video teknisi", 12f).apply { alpha = 0.78f }
         bottom.addView(hint, FrameLayout.LayoutParams(-1, dp(30), Gravity.TOP).apply { topMargin = dp(7) })
 
+        cameraButton = Button(this).apply {
+            text = "BUKA KAMERA"
+            textSize = 12f
+            setTextColor(0xFFFFFFFF.toInt())
+            background = getDrawable(R.drawable.bg_control)
+            elevation = dp(5).toFloat()
+            setOnClickListener { openCameraFromButton() }
+        }
+        bottom.addView(cameraButton, FrameLayout.LayoutParams(dp(126), dp(44), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(28) })
+
         recordButton = Button(this).apply {
             text = ""
             background = getDrawable(R.drawable.bg_record)
             elevation = dp(8).toFloat()
             setOnClickListener { toggleRecording() }
         }
-        bottom.addView(recordButton, FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER).apply { topMargin = dp(28) })
+        bottom.addView(recordButton, FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER).apply { topMargin = dp(76) })
 
         recordIcon = textView("●", 30f, true).apply { setTextColor(0xFF111111.toInt()); isClickable = false }
-        bottom.addView(recordIcon, FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER).apply { topMargin = dp(28) })
+        bottom.addView(recordIcon, FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER).apply { topMargin = dp(76) })
 
         val gallery = textView("▣", 26f).apply { background = getDrawable(R.drawable.bg_control) }
         gallery.setOnClickListener { Toast.makeText(this, "Video tersimpan otomatis di Galeri", Toast.LENGTH_SHORT).show() }
@@ -317,6 +334,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             modes?.contains(CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON) == true
         } catch (_: Exception) {
             false
+        }
+    }
+
+    private fun openCameraFromButton() {
+        if (cameraActive) {
+            Toast.makeText(this, "Kamera sudah aktif", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (!cameraGranted || !audioGranted) {
+            permissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+        } else {
+            startCamera(true)
         }
     }
 
@@ -386,6 +417,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     preview,
                     videoCapture
                 )
+                cameraActive = true
+                cameraButton.text = "KAMERA AKTIF"
+                cameraButton.alpha = 0.7f
+                recordButton.isEnabled = true
+                recordButton.alpha = 1f
                 setZoom(0f)
                 exposureIndex = 0
                 camera?.cameraControl?.setExposureCompensationIndex(0)
@@ -411,6 +447,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         fallbackPreview,
                         videoCapture
                     )
+                    cameraActive = true
+                    cameraButton.text = "KAMERA AKTIF"
+                    cameraButton.alpha = 0.7f
+                    recordButton.isEnabled = true
+                    recordButton.alpha = 1f
                     setZoom(0f)
                     exposureIndex = 0
                     camera?.cameraControl?.setExposureCompensationIndex(0)
@@ -566,6 +607,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun toggleRecording() {
+        if (!cameraActive || recorder == null) {
+            Toast.makeText(this, "Tekan BUKA KAMERA terlebih dahulu", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (recording != null) {
             stoppingForLoop = false
             recording?.stop()
@@ -635,6 +680,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         recording?.stop()
         timerHandler.removeCallbacksAndMessages(null)
         sensorManager.unregisterListener(this)
+        cameraActive = false
         super.onDestroy()
     }
 }
