@@ -47,6 +47,9 @@ import android.widget.ImageView
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 
 class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var previewView: PreviewView
@@ -61,8 +64,23 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var exposureText: TextView
     private lateinit var tiltText: TextView
     private lateinit var batteryText: TextView
+    private lateinit var gpsText: TextView
+    private lateinit var compassText: TextView
     private lateinit var pauseButton: TextView
     private var batteryReceiver: BroadcastReceiver? = null
+    private lateinit var locationManager: LocationManager
+    private var gpsEnabled = false
+    private var lastSpeedKmh = 0f
+    private var lastGpsAccuracy = 0f
+    private val gpsLocationListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) {
+            if (location.hasSpeed()) lastSpeedKmh = (location.speed * 3.6f).coerceAtLeast(0f)
+            if (location.hasAccuracy()) lastGpsAccuracy = location.accuracy
+            updateGpsHud(location)
+        }
+        override fun onProviderEnabled(provider: String) { updateGpsStatus() }
+        override fun onProviderDisabled(provider: String) { updateGpsStatus() }
+    }
     private lateinit var sensorManager: SensorManager
     private var rotationSensor: Sensor? = null
     private var gyroSensor: Sensor? = null
@@ -131,6 +149,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
+    private val locationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startGpsUpdates()
+        else {
+            gpsEnabled = false
+            gpsText.text = "GPS OFF"
+            Toast.makeText(this, "Izin lokasi ditolak • GPS tetap OFF", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val cameraGranted = result[Manifest.permission.CAMERA] == true ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -150,6 +177,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         hideSystemBars()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         noiseSuppressorAvailable = try { android.media.audiofx.NoiseSuppressor.isAvailable() } catch (_: Throwable) { false }
@@ -166,6 +194,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         })
         buildUi()
+        updateGpsStatus()
         // V17: kamera TIDAK otomatis aktif saat aplikasi dibuka.
         // Pengguna harus menekan "BUKA KAMERA" terlebih dahulu.
         cameraActive = false
@@ -249,7 +278,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V26  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V27  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -275,6 +304,19 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         batteryText = textView("●  --%", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(9),0,dp(9),0) }
         hud.addView(batteryText, FrameLayout.LayoutParams(dp(76), dp(38), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(14) })
+
+        gpsText = textView("GPS OFF", 10f, true).apply {
+            background = getDrawable(R.drawable.bg_toggle)
+            setPadding(dp(8), 0, dp(8), 0)
+            setOnClickListener { toggleGps() }
+        }
+        hud.addView(gpsText, FrameLayout.LayoutParams(dp(104), dp(34), Gravity.TOP or Gravity.START).apply { leftMargin=dp(14); topMargin=dp(106) })
+
+        compassText = textView("N 000°", 10f, true).apply {
+            background = getDrawable(R.drawable.bg_chip)
+            setPadding(dp(8), 0, dp(8), 0)
+        }
+        hud.addView(compassText, FrameLayout.LayoutParams(dp(104), dp(34), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(106) })
 
         val quickSettings = textView("⚙", 20f, true).apply {
             background = getDrawable(R.drawable.bg_control)
@@ -993,6 +1035,65 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
+    private fun cardinalDirection(degrees: Float): String {
+        val dirs = arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+        return dirs[((degrees + 22.5f) / 45f).toInt() % 8]
+    }
+
+    private fun toggleGps() {
+        if (gpsEnabled) {
+            stopGpsUpdates()
+            return
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            startGpsUpdates()
+        } else {
+            locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+    }
+
+    private fun startGpsUpdates() {
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            gpsEnabled = false
+            gpsText.text = "GPS OFF"
+            Toast.makeText(this, "GPS HP sedang mati • aktifkan GPS lalu tekan tombol lagi", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 1f, gpsLocationListener, Looper.getMainLooper())
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 3f, gpsLocationListener, Looper.getMainLooper())
+            }
+            gpsEnabled = true
+            gpsText.text = "GPS ON • 0 km/h"
+            Toast.makeText(this, "GPS aktif • kecepatan ditampilkan di HUD", Toast.LENGTH_SHORT).show()
+            updateGpsStatus()
+        } catch (e: SecurityException) {
+            gpsEnabled = false
+            gpsText.text = "GPS OFF"
+        }
+    }
+
+    private fun stopGpsUpdates() {
+        try { locationManager.removeUpdates(gpsLocationListener) } catch (_: Exception) {}
+        gpsEnabled = false
+        gpsText.text = "GPS OFF"
+        lastSpeedKmh = 0f
+        lastGpsAccuracy = 0f
+    }
+
+    private fun updateGpsStatus() {
+        if (!gpsEnabled) { gpsText.text = "GPS OFF"; return }
+        val enabled = try { locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) } catch (_: Exception) { false }
+        gpsText.text = if (enabled) String.format("GPS ON • %.0f km/h", lastSpeedKmh) else "GPS WAIT"
+    }
+
+    private fun updateGpsHud(location: Location) {
+        if (!gpsEnabled) return
+        val accuracy = if (location.hasAccuracy()) String.format(" • ±%.0fm", location.accuracy) else ""
+        gpsText.text = String.format("GPS ON • %.0f km/h%s", lastSpeedKmh, accuracy)
+    }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -1008,6 +1109,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onPause() {
         sensorManager.unregisterListener(this)
+        if (gpsEnabled) stopGpsUpdates()
         super.onPause()
     }
 
@@ -1029,6 +1131,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         SensorManager.getRotationMatrixFromVector(matrix, event.values)
         val orientation = FloatArray(3)
         SensorManager.getOrientation(matrix, orientation)
+        var azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
+        if (azimuth < 0f) azimuth += 360f
+        compassText.text = String.format("%s %03d°", cardinalDirection(azimuth), azimuth.roundToInt().coerceIn(0, 359))
         var roll = Math.toDegrees(orientation[2].toDouble()).toFloat()
         var pitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
         if (roll > 180f) roll -= 360f
@@ -1058,6 +1163,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         recording?.stop()
         timerHandler.removeCallbacksAndMessages(null)
         sensorManager.unregisterListener(this)
+        stopGpsUpdates()
         batteryReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
         batteryReceiver = null
         cameraActive = false
