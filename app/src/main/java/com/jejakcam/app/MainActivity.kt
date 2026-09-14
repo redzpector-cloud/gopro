@@ -68,6 +68,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var loopRecordingOn = true
     private var loopDurationMs = 3 * 60 * 1000L
     private var recordingStartedAt = 0L
+    private var audioEnhancementOn = true
+    private var noiseSuppressorAvailable = false
     private var segmentNumber = 1
     private var stoppingForLoop = false
     private val timerHandler = Handler(Looper.getMainLooper())
@@ -97,6 +99,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        noiseSuppressorAvailable = try { android.media.audiofx.NoiseSuppressor.isAvailable() } catch (_: Throwable) { false }
         buildUi()
         val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -196,6 +199,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         root.addView(stabilizationText, FrameLayout.LayoutParams(dp(112), dp(38), Gravity.END or Gravity.TOP).apply { rightMargin = dp(16); topMargin = dp(76) })
+
+        val audioText = textView("MIC ENH", 11f, true).apply {
+            background = getDrawable(R.drawable.bg_toggle)
+            setOnClickListener {
+                audioEnhancementOn = !audioEnhancementOn
+                text = if (audioEnhancementOn) "MIC ENH" else "MIC RAW"
+                val note = if (noiseSuppressorAvailable) "DSP noise suppression tersedia di perangkat" else "DSP audio bergantung pada HP"
+                Toast.makeText(this@MainActivity, if (audioEnhancementOn) "Audio enhancement ON • $note" else "Audio enhancement OFF", Toast.LENGTH_SHORT).show()
+            }
+        }
+        root.addView(audioText, FrameLayout.LayoutParams(dp(96), dp(34), Gravity.END or Gravity.TOP).apply { rightMargin = dp(16); topMargin = dp(118) })
 
         // Quick exposure controls for changing light while riding.
         val exposurePanel = LinearLayout(this).apply {
