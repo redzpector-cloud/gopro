@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -18,6 +19,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
+import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -25,6 +27,9 @@ import androidx.camera.video.*
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
+import java.util.concurrent.TimeUnit
+import android.hardware.camera2.CameraMetadata
+import android.hardware.camera2.CaptureRequest
 
 class MainActivity : ComponentActivity() {
     private lateinit var previewView: PreviewView
@@ -196,7 +201,9 @@ class MainActivity : ComponentActivity() {
                 val point = previewView.meteringPointFactory.createPoint(event.x, event.y)
                 try {
                     camera?.cameraControl?.startFocusAndMetering(
-                        androidx.camera.core.FocusMeteringAction.Builder(point).build()
+                        androidx.camera.core.FocusMeteringAction.Builder(point)
+                            .setAutoCancelDuration(1, TimeUnit.SECONDS)
+                            .build()
                     )
                 } catch (_: Exception) { }
             }
@@ -208,16 +215,79 @@ class MainActivity : ComponentActivity() {
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             val provider = future.get()
-            val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
-            recorder = Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.FHD)).build()
-            val videoCapture = VideoCapture.withOutput(recorder!!)
+
+            // Action-camera tuning: continuous video AF + video stabilization.
+            // CameraX 1.4+ provides hardware/device video stabilization when supported.
+            val previewBuilder = Preview.Builder()
+            Camera2Interop.Extender(previewBuilder)
+                .setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AF_MODE,
+                    CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                )
+                .setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AE_MODE,
+                    CameraMetadata.CONTROL_AE_MODE_ON
+                )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                try {
+                    previewBuilder.setPreviewStabilizationEnabled(true)
+                } catch (_: Exception) {
+                    // Some HALs expose video stabilization but reject preview stabilization.
+                }
+            }
+            val preview = previewBuilder.build().also {
+                it.surfaceProvider = previewView.surfaceProvider
+            }
+
+            recorder = Recorder.Builder()
+                .setQualitySelector(QualitySelector.from(Quality.FHD))
+                .build()
+
+            val videoCapture = try {
+                VideoCapture.Builder(recorder!!)
+                    .setVideoStabilizationEnabled(true)
+                    .build()
+            } catch (_: Exception) {
+                // Fall back to normal recording if this phone's camera HAL does not
+                // support CameraX video stabilization.
+                VideoCapture.withOutput(recorder!!)
+            }
+
             provider.unbindAll()
             try {
-                camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, videoCapture)
+                camera = provider.bindToLifecycle(
+                    this,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    videoCapture
+                )
                 setZoom(0f)
-                statusText.text = if (withAudio) "READY" else "VIDEO ONLY"
+                statusText.text = if (withAudio) "ACTION • STAB" else "ACTION • VIDEO"
             } catch (e: Exception) {
-                Toast.makeText(this, "Kamera gagal dibuka: ${e.message}", Toast.LENGTH_LONG).show()
+                // If preview stabilization causes a device-specific HAL error, retry
+                // once without preview stabilization but keep recording stabilization.
+                try {
+                    provider.unbindAll()
+                    val fallbackPreviewBuilder = Preview.Builder()
+                    Camera2Interop.Extender(fallbackPreviewBuilder)
+                        .setCaptureRequestOption(
+                            CaptureRequest.CONTROL_AF_MODE,
+                            CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                        )
+                    val fallbackPreview = fallbackPreviewBuilder.build().also {
+                        it.surfaceProvider = previewView.surfaceProvider
+                    }
+                    camera = provider.bindToLifecycle(
+                        this,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        fallbackPreview,
+                        videoCapture
+                    )
+                    setZoom(0f)
+                    statusText.text = if (withAudio) "ACTION • STAB" else "ACTION • VIDEO"
+                } catch (fallbackError: Exception) {
+                    Toast.makeText(this, "Kamera gagal dibuka: ${fallbackError.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }, ContextCompat.getMainExecutor(this))
     }
