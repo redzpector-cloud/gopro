@@ -34,8 +34,13 @@ import kotlin.math.roundToInt
 import java.util.concurrent.TimeUnit
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.widget.ImageView
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var previewView: PreviewView
     private lateinit var recordButton: Button
     private lateinit var recordIcon: TextView
@@ -43,6 +48,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var statusText: TextView
     private lateinit var zoomText: TextView
     private lateinit var stabilizationText: TextView
+    private lateinit var horizonText: TextView
+    private lateinit var sensorManager: SensorManager
+    private var rotationSensor: Sensor? = null
 
     private var recorder: Recorder? = null
     private var recording: Recording? = null
@@ -75,6 +83,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         hideSystemBars()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         buildUi()
         val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -174,6 +184,15 @@ class MainActivity : ComponentActivity() {
         }
         root.addView(stabilizationText, FrameLayout.LayoutParams(dp(92), dp(38), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(16) })
 
+        // Horizon assist: sensor-driven level indicator. The camera/video stabilization
+        // remains hardware/device controlled; this indicator helps keep the motorcycle
+        // mount level while recording.
+        horizonText = textView("—  LEVEL  —", 12f, true).apply {
+            background = getDrawable(R.drawable.bg_chip)
+            alpha = 0.88f
+        }
+        root.addView(horizonText, FrameLayout.LayoutParams(dp(120), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(118) })
+
         // Bottom controls
         val bottom = FrameLayout(this).apply { background = getDrawable(R.drawable.bg_bottom) }
         val hint = textView("Tap untuk fokus  •  Rekam video teknisi", 12f).apply { alpha = 0.78f }
@@ -259,6 +278,10 @@ class MainActivity : ComponentActivity() {
                 .setCaptureRequestOption(
                     CaptureRequest.CONTROL_AE_MODE,
                     CameraMetadata.CONTROL_AE_MODE_ON
+                )
+                .setCaptureRequestOption(
+                    CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+                    CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON
                 )
             val videoCapture = try {
                 videoBuilder
@@ -426,9 +449,36 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) hideSystemBars()
     }
 
+    override fun onResume() {
+        super.onResume()
+        rotationSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+    }
+
+    override fun onPause() {
+        sensorManager.unregisterListener(this)
+        super.onPause()
+    }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
+        val matrix = FloatArray(9)
+        SensorManager.getRotationMatrixFromVector(matrix, event.values)
+        val orientation = FloatArray(3)
+        SensorManager.getOrientation(matrix, orientation)
+        var roll = Math.toDegrees(orientation[2].toDouble()).toFloat()
+        if (roll > 180f) roll -= 360f
+        if (roll < -180f) roll += 360f
+        val clamped = roll.coerceIn(-20f, 20f)
+        horizonText.rotation = -clamped
+        horizonText.text = if (kotlin.math.abs(roll) < 2.5f) "—  LEVEL  —" else String.format("—  %.0f°  —", roll)
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
     override fun onDestroy() {
         recording?.stop()
         timerHandler.removeCallbacksAndMessages(null)
+        sensorManager.unregisterListener(this)
         super.onDestroy()
     }
 }

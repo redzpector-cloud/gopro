@@ -1,22 +1,10 @@
-# JEJAK CAM
-Starter Android app bergaya action camera / GoPro untuk HP.
+# JEJAK CAM V9 – Action Motor
 
-## Fitur versi awal
-- Live camera preview
-- Rekam video Full HD
-- Audio microphone
-- Simpan MP4 ke galeri
-- Portrait mode
+Versi fokus untuk perekaman saat motor bergerak:
+- continuous autofocus
+- CameraX video stabilization + Camera2 EIS request
+- horizon assist berbasis sensor rotasi untuk membantu menjaga HP tetap level
+- wide camera jika perangkat mengekspos kamera ultra-wide
+- 1080p recording
 
-## Cara menjalankan
-Buka folder ini di Android Studio terbaru, tunggu Gradle sync, lalu Run ke HP Android.
-
-Versi berikutnya dapat ditambah: 4K, 60 FPS, EIS, ultrawide, zoom, timelapse, slow motion, grid/level, GPS overlay, watermark JEJAK TEKNISI, editor video, dan mode teknisi meja kerja.
-
-
-## JEJAK CAM V6 – Action Motor Mode
-- Continuous video autofocus (Camera2 AF)
-- 1-second tap-to-focus auto-cancel so continuous AF resumes quickly
-- CameraX 1.4 video stabilization enabled when supported
-- Preview stabilization attempted on Android 13+ with fallback for HALs that reject it
-- 1080p/30fps retained for reliable stabilization support
+Catatan: horizon assist adalah indikator level; koreksi horizon video penuh tetap bergantung pada kemampuan hardware/OIS/EIS perangkat.
