@@ -88,6 +88,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var loopDurationMs = 3 * 60 * 1000L
     private var recordingStartedAt = 0L
     private var audioEnhancementOn = true
+    private var audioEnabled = true
     private var noiseSuppressorAvailable = false
     private var segmentNumber = 1
     private var stoppingForLoop = false
@@ -221,12 +222,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "V21: 1080p 30fps • EIS • Gyro • Horizon HUD • Swipe Zoom • Loop 3m", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { Toast.makeText(this@MainActivity, "V25: 4K/1080P • EIS • Gyro • Horizon HUD • Audio MIC ON/OFF", Toast.LENGTH_SHORT).show() }
         }
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V21  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V25  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -344,7 +345,19 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val quickRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         val quick=textView("QUICK REC",10f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{toggleRecording()}}
         val loop=textView("LOOP 3m",10f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{loopRecordingOn=!loopRecordingOn;text=if(loopRecordingOn)"LOOP 3m" else "LOOP OFF"}}
-        val mic=textView("MIC ENH",10f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{audioEnhancementOn=!audioEnhancementOn;text=if(audioEnhancementOn)"MIC ENH" else "MIC RAW"}}
+        val mic=textView("MIC ON",10f,true).apply{
+            background=getDrawable(R.drawable.bg_control)
+            setOnClickListener{
+                if (recording != null) {
+                    Toast.makeText(this@MainActivity,"Hentikan rekaman untuk mengubah MIC",Toast.LENGTH_SHORT).show()
+                } else {
+                    audioEnabled=!audioEnabled
+                    audioEnhancementOn=audioEnabled
+                    text=if(audioEnabled)"MIC ON" else "MIC OFF"
+                    Toast.makeText(this@MainActivity, if(audioEnabled) "Mic aktif • audio akan direkam" else "Mic mati • video tanpa audio", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
         quickRow.addView(quick,LinearLayout.LayoutParams(dp(88),dp(38)).apply{rightMargin=dp(5)});quickRow.addView(loop,LinearLayout.LayoutParams(dp(76),dp(38)).apply{leftMargin=dp(5);rightMargin=dp(5)});quickRow.addView(mic,LinearLayout.LayoutParams(dp(76),dp(38)).apply{leftMargin=dp(5)})
         bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(40)))
         hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(184),Gravity.BOTTOM))
@@ -449,8 +462,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         if (!cameraGranted) {
-            permissions.launch(if (photo) arrayOf(Manifest.permission.CAMERA) else arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
-        } else if (!photo && !audioGranted) {
+            permissions.launch(if (photo || !audioEnabled) arrayOf(Manifest.permission.CAMERA) else arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+        } else if (!photo && audioEnabled && !audioGranted) {
             permissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
         } else {
             startCamera(!photo)
@@ -728,7 +741,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun startSegment() {
         val r = recorder ?: return
         val pending = r.prepareRecording(this, makeOutputOptions())
-        val prepared = if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+        val prepared = if (audioEnabled && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             pending.withAudioEnabled()
         } else pending
         recording = prepared.start(ContextCompat.getMainExecutor(this)) { event ->
