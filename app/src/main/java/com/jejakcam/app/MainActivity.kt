@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.view.Gravity
 import android.view.View
@@ -60,6 +61,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var exposureText: TextView
     private lateinit var tiltText: TextView
     private lateinit var batteryText: TextView
+    private lateinit var pauseButton: TextView
     private var batteryReceiver: BroadcastReceiver? = null
     private lateinit var sensorManager: SensorManager
     private var rotationSensor: Sensor? = null
@@ -93,6 +95,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var segmentNumber = 1
     private var stoppingForLoop = false
     private var stopRequestedByUser = false
+    private var countdownSeconds = 0
+    private var countdownActive = false
+    private var recordingPaused = false
+    private var loopDeadlineMs = 0L
+    private var loopRemainingMs = 0L
     private var selectedQuality = Quality.FHD
     private var selectedQualityLabel = "1080P"
     private var cameraActive = false
@@ -106,6 +113,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 timerText.text = String.format("%02d:%02d", seconds / 60, seconds % 60)
                 timerHandler.postDelayed(this, 500)
             }
+        }
+    }
+    private val countdownRunnable = object : Runnable {
+        override fun run() {
+            if (!countdownActive) return
+            if (countdownSeconds <= 0) {
+                countdownActive = false
+                statusText.text = "REC • START"
+                startSegment()
+                return
+            }
+            statusText.text = "START DALAM $countdownSeconds"
+            timerText.text = String.format("00:0%d", countdownSeconds)
+            countdownSeconds--
+            timerHandler.postDelayed(this, 1000)
         }
     }
 
@@ -222,12 +244,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "V25: 4K/1080P • EIS • Gyro • Horizon HUD • Audio MIC ON/OFF", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { Toast.makeText(this@MainActivity, "V26: 4K/1080P • EIS • Gyro • Horizon HUD • MIC • TIMER • PAUSE • LOOP", Toast.LENGTH_SHORT).show() }
         }
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V25  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V26  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -360,7 +382,28 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         quickRow.addView(quick,LinearLayout.LayoutParams(dp(88),dp(38)).apply{rightMargin=dp(5)});quickRow.addView(loop,LinearLayout.LayoutParams(dp(76),dp(38)).apply{leftMargin=dp(5);rightMargin=dp(5)});quickRow.addView(mic,LinearLayout.LayoutParams(dp(76),dp(38)).apply{leftMargin=dp(5)})
         bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(40)))
-        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(184),Gravity.BOTTOM))
+
+        val actionRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
+        val countdownBtn=textView("TIMER OFF",10f,true).apply{
+            background=getDrawable(R.drawable.bg_control)
+            setOnClickListener{
+                if(recording != null || countdownActive){
+                    Toast.makeText(this@MainActivity,"Hentikan/ batalkan proses REC dulu",Toast.LENGTH_SHORT).show()
+                } else {
+                    countdownSeconds = when(countdownSeconds){0 -> 3; 3 -> 5; 5 -> 10; else -> 0}
+                    text=if(countdownSeconds==0) "TIMER OFF" else "TIMER ${countdownSeconds}s"
+                }
+            }
+        }
+        pauseButton=textView("PAUSE",10f,true).apply{
+            background=getDrawable(R.drawable.bg_control)
+            alpha=.5f
+            setOnClickListener{togglePauseResume(this)}
+        }
+        actionRow.addView(countdownBtn,LinearLayout.LayoutParams(dp(92),dp(36)).apply{rightMargin=dp(5)})
+        actionRow.addView(pauseButton,LinearLayout.LayoutParams(dp(82),dp(36)).apply{leftMargin=dp(5)})
+        bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(38)))
+        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(232),Gravity.BOTTOM))
 
         root.addView(hud,FrameLayout.LayoutParams(-1,-1))
         setContentView(root)
@@ -731,8 +774,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun resetRecordUi() {
         timerHandler.removeCallbacks(timerRunnable)
+        timerHandler.removeCallbacks(countdownRunnable)
+        countdownActive = false
+        recordingPaused = false
+        loopDeadlineMs = 0L
+        loopRemainingMs = 0L
         timerText.text = "00:00"
         statusText.text = "READY"
+        if (::pauseButton.isInitialized) { pauseButton.text = "PAUSE"; pauseButton.alpha = .5f }
         recordButton.background = getDrawable(R.drawable.bg_record)
         recordIcon.text = "●"
         recordIcon.setTextColor(0xFF111111.toInt())
@@ -748,20 +797,29 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             when (event) {
                 is VideoRecordEvent.Start -> {
                     recordingStartedAt = System.currentTimeMillis()
+                    recordingPaused = false
                     statusText.text = if (loopRecordingOn) "REC • LOOP" else "REC"
                     timerHandler.removeCallbacks(timerRunnable)
                     timerHandler.post(timerRunnable)
                     recordButton.background = getDrawable(R.drawable.bg_record_active)
                     recordIcon.text = "■"
                     recordIcon.setTextColor(0xFFFFFFFF.toInt())
-                    if (loopRecordingOn) {
-                        timerHandler.postDelayed({
-                            if (recording != null && !stoppingForLoop && loopRecordingOn) {
-                                stoppingForLoop = true
-                                stopRequestedByUser = false
-                                recording?.stop()
-                            }
-                        }, loopDurationMs)
+                    loopDeadlineMs = if (loopRecordingOn) System.currentTimeMillis() + loopDurationMs else 0L
+                    if (loopRecordingOn) scheduleLoopStop(loopDurationMs)
+                }
+                is VideoRecordEvent.Pause -> {
+                    recordingPaused = true
+                    statusText.text = "PAUSED"
+                    timerHandler.removeCallbacks(timerRunnable)
+                }
+                is VideoRecordEvent.Resume -> {
+                    recordingPaused = false
+                    statusText.text = if (loopRecordingOn) "REC • LOOP" else "REC"
+                    timerHandler.removeCallbacks(timerRunnable)
+                    timerHandler.post(timerRunnable)
+                    if (loopRecordingOn && loopRemainingMs > 0L) {
+                        loopDeadlineMs = System.currentTimeMillis() + loopRemainingMs
+                        scheduleLoopStop(loopRemainingMs)
                     }
                 }
                 is VideoRecordEvent.Finalize -> {
@@ -785,6 +843,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
             }
         }
+    }
+
+    private fun scheduleLoopStop(delayMs: Long) {
+        timerHandler.removeCallbacksAndMessages("LOOP_STOP")
+        timerHandler.postAtTime({
+            if (recording != null && !stoppingForLoop && !stopRequestedByUser && loopRecordingOn && !recordingPaused) {
+                stoppingForLoop = true
+                stopRequestedByUser = false
+                loopRemainingMs = 0L
+                recording?.stop()
+            }
+        }, "LOOP_STOP", SystemClock.uptimeMillis() + delayMs.coerceAtLeast(1L))
     }
 
     private fun cycleVideoQuality() {
@@ -869,15 +939,58 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             capturePhoto()
             return
         }
+        if (countdownActive) {
+            countdownActive = false
+            timerHandler.removeCallbacks(countdownRunnable)
+            timerText.text = "00:00"
+            statusText.text = "READY"
+            return
+        }
         if (recording != null) {
             stopRequestedByUser = true
             stoppingForLoop = false
+            loopRemainingMs = 0L
             recording?.stop()
             return
         }
         segmentNumber = 1
         stoppingForLoop = false
-        startSegment()
+        stopRequestedByUser = false
+        recordingPaused = false
+        if (countdownSeconds > 0) {
+            countdownActive = true
+            timerText.text = String.format("00:0%d", countdownSeconds)
+            statusText.text = "START DALAM $countdownSeconds"
+            countdownSeconds--
+            timerHandler.removeCallbacks(countdownRunnable)
+            timerHandler.postDelayed(countdownRunnable, 1000)
+        } else {
+            startSegment()
+        }
+    }
+
+    private fun togglePauseResume(button: TextView) {
+        val active = recording
+        if (active == null) {
+            Toast.makeText(this, "Belum merekam", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            if (!recordingPaused) {
+                if (loopRecordingOn && loopDeadlineMs > 0L) {
+                    loopRemainingMs = (loopDeadlineMs - System.currentTimeMillis()).coerceAtLeast(0L)
+                }
+                active.pause()
+                button.text = "RESUME"
+                button.alpha = 1f
+            } else {
+                active.resume()
+                button.text = "PAUSE"
+                button.alpha = .85f
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Pause/Resume tidak didukung kamera ini", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
