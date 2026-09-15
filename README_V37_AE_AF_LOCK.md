@@ -1,6 +1,6 @@
-# JejakCam V51 — Auto Exposure + Focus Lock
+# JejakCam V52 — Auto Exposure + Focus Lock
 
-V51 menambahkan kontrol fokus dan exposure yang lebih stabil untuk rekaman action-camera.
+V52 menambahkan kontrol fokus dan exposure yang lebih stabil untuk rekaman action-camera.
 
 ## Fitur
 - Tap pada preview untuk melakukan focus + exposure metering pada titik yang disentuh.

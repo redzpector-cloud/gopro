@@ -1,4 +1,4 @@
-# JejakCam V51 — Smart Camera Tuning
+# JejakCam V52 — Smart Camera Tuning
 
 Tujuan: memilih konfigurasi kamera yang paling aman dan berkualitas berdasarkan capability perangkat dan kondisi penggunaan.
 

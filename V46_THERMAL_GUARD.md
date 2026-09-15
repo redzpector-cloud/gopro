@@ -1,4 +1,4 @@
-# JejakCam V51 — Thermal Guard
+# JejakCam V52 — Thermal Guard
 
 Tujuan: menjaga kestabilan rekaman panjang, terutama 4K, saat perangkat mulai panas.
 

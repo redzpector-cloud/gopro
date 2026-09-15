@@ -1,4 +1,4 @@
-# JejakCam V51 — Video Quality Pro
+# JejakCam V52 — Video Quality Pro
 
 Fokus utama: kualitas gambar video sebelum menambah efek bokeh.
 
