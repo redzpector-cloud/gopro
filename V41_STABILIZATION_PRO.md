@@ -1,4 +1,4 @@
-# JejakCam V46 — Stabilization Pro
+# JejakCam V48 — Stabilization Pro
 
 Fokus:
 - EIS stabilization yang lebih stabil saat merekam.
