@@ -1,6 +1,6 @@
-# JejakCam V40 — Auto Exposure + Focus Lock
+# JejakCam V41 — Auto Exposure + Focus Lock
 
-V40 menambahkan kontrol fokus dan exposure yang lebih stabil untuk rekaman action-camera.
+V41 menambahkan kontrol fokus dan exposure yang lebih stabil untuk rekaman action-camera.
 
 ## Fitur
 - Tap pada preview untuk melakukan focus + exposure metering pada titik yang disentuh.
