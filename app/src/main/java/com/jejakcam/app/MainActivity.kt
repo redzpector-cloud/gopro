@@ -155,6 +155,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     // V60: identifies the active recording session so late callbacks from an older
     // CameraX Recording cannot alter the current session or restart a loop segment.
     private var recordingSessionId = 0L
+    // V61: blocks a new recording while CameraX is finalizing the previous file.
+    private var recordingFinalizing = false
 
     // V53: separate function state (AUTO/ON/OFF) from HUD visibility (SHOW/HIDE).
     private val prefs by lazy { getSharedPreferences("jejakcam_settings", MODE_PRIVATE) }
@@ -1227,7 +1229,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun startSegment() {
         if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
         val r = recorder ?: return
-        if (recording != null || stoppingForLoop || stopRequestedByUser) return
+        if (recording != null || recordingFinalizing || stoppingForLoop || stopRequestedByUser) return
         val sessionId = ++recordingSessionId
         if (!gpsTrackRecording && gpsEnabled && segmentNumber == 1) beginGpsRecording()
         val pending = r.prepareRecording(this, makeOutputOptions())
@@ -1240,7 +1242,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             // V59: ignore late CameraX callbacks after Activity teardown.
             if (activityStopping || isFinishing || isDestroyed) {
                 if (event is VideoRecordEvent.Finalize) {
-                    if (sessionId == recordingSessionId) recording = null
+                    if (sessionId == recordingSessionId) { recording = null; recordingFinalizing = false }
                     stoppingForLoop = false
                     stopRequestedByUser = false
                 }
@@ -1281,18 +1283,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     if (event.hasError()) {
                         Toast.makeText(this, "Gagal menyimpan video: ${event.error}", Toast.LENGTH_LONG).show()
                         recording = null
+                        recordingFinalizing = false
                         stoppingForLoop = false
                         stopRequestedByUser = false
                         finishGpsRecording(saveTrack = true)
                         resetRecordUi()
                     } else if (stoppingForLoop && loopRecordingOn && !stopRequestedByUser && !activityStopping && !isFinishing && !isDestroyed && cameraActive) {
                         recording = null
+                        recordingFinalizing = false
                         segmentNumber++
                         loopText.text = "SEG %02d".format(segmentNumber)
                         stoppingForLoop = false
                         startSegment()
                     } else {
                         recording = null
+                        recordingFinalizing = false
                         stoppingForLoop = false
                         stopRequestedByUser = false
                         finishGpsRecording(saveTrack = true)
@@ -1428,6 +1433,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             return
         }
         if (recording != null) {
+            if (recordingFinalizing) return
+            recordingFinalizing = true
             stopRequestedByUser = true
             stoppingForLoop = false
             loopRemainingMs = 0L
@@ -1435,6 +1442,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             return
         }
         segmentNumber = 1
+        recordingFinalizing = false
         stoppingForLoop = false
         stopRequestedByUser = false
         recordingPaused = false
@@ -1772,6 +1780,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         countdownActive = false
         stoppingForLoop = false
         stopRequestedByUser = true
+        recordingFinalizing = true
         val activeRecording = recording
         recording = null
         activeRecording?.stop()
