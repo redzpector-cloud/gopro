@@ -274,7 +274,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
 
-        // V45: tap-to-focus + AE/AF lock. A tap meters/focuses at the selected point;
+        // V46: tap-to-focus + AE/AF lock. A tap meters/focuses at the selected point;
         // when LOCK is enabled, the focus action is held and the current EV is kept.
         previewView.setOnTouchListener { _, event ->
             if (event.action == android.view.MotionEvent.ACTION_UP && cameraActive && recording == null) {
@@ -328,12 +328,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "V45: AE/AF LOCK • TAP FOCUS • 4K/1080P • EIS • GYRO • HORIZON • MIC • LOOP", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { Toast.makeText(this@MainActivity, "V46: AE/AF LOCK • TAP FOCUS • 4K/1080P • EIS • GYRO • HORIZON • MIC • LOOP", Toast.LENGTH_SHORT).show() }
         }
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V45  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V46  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
