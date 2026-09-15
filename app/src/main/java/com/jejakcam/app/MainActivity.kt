@@ -249,13 +249,25 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 return true
             }
         })
+        // V57: preserve camera intent across configuration changes (rotation/recreation)
+        // without making a fresh app launch open the camera automatically.
+        val restoredCamera = savedInstanceState?.getBoolean("camera_requested", false) == true
+        val restoredPhoto = savedInstanceState?.getBoolean("requested_photo_mode", false) == true
+        if (restoredCamera) {
+            cameraRequested = true
+            requestedPhotoMode = restoredPhoto
+            photoMode = restoredPhoto
+            backgroundCameraRelease = true
+        }
+
         loadSettings()
         buildUi()
         updateGpsStatus()
         storageHandler.post(storageRunnable)
         updateStorageHud()
-        // V17: kamera TIDAK otomatis aktif saat aplikasi dibuka.
-        // Pengguna harus menekan "BUKA KAMERA" terlebih dahulu.
+        // V17: kamera TIDAK otomatis aktif saat aplikasi baru dibuka.
+        // V57: onResume() may restore it only when state came from a prior
+        // camera session (e.g. rotation/recreation/background).
         cameraActive = false
         previewView.visibility = View.GONE
         cameraScreen.visibility = View.GONE
@@ -1335,8 +1347,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         })
     }
 
-    // V56: release CameraX when the Activity truly goes to the background, but keep
-    // the user's intent so onResume() can reopen it automatically. This avoids stale
+    // V57: release idle CameraX when the Activity goes to the background, but keep
+    // the user's intent so onResume()/configuration recreation can reopen it automatically. This avoids stale
     // camera bindings after screen-off/app-switch while preserving the home UI state.
     private fun releaseCameraForBackground() {
         if (!cameraActive || recording != null) return
@@ -1639,6 +1651,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (hasFocus) hideSystemBars()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        // V57: retain only the user's camera intent. We deliberately do not
+        // persist an active Recording object; CameraX owns that lifecycle.
+        outState.putBoolean("camera_requested", cameraRequested)
+        outState.putBoolean("requested_photo_mode", requestedPhotoMode)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onResume() {
         super.onResume()
         rotationSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
@@ -1648,7 +1668,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (cameraRequested && !cameraActive && backgroundCameraRelease &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             backgroundCameraRelease = false
-            startCamera(!photoMode && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+            photoMode = requestedPhotoMode
+            startCamera(!requestedPhotoMode &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
         }
     }
 
