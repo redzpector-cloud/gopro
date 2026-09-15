@@ -1248,10 +1248,26 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         recordIcon.setTextColor(0xFF111111.toInt())
     }
 
+    // V63: recording preflight guard. Do not start a new MediaStore recording
+    // when storage is already critically low; this avoids creating an output
+    // item that immediately fails during finalization.
+    private fun hasSafeRecordingStorage(): Boolean {
+        val (free, total) = storageInfo()
+        if (free <= 0L || total <= 0L) return true // keep the existing fallback behavior
+        val freePct = free.toDouble() / total.toDouble() * 100.0
+        return free > 256L * 1024L * 1024L && freePct > 1.0
+    }
+
     private fun startSegment() {
         if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
         val r = recorder ?: return
         if (recording != null || recordingFinalizing || stoppingForLoop || stopRequestedByUser) return
+        if (!hasSafeRecordingStorage()) {
+            lowStorageStopTriggered = true
+            Toast.makeText(this, "Penyimpanan terlalu penuh • kosongkan ruang sebelum merekam", Toast.LENGTH_LONG).show()
+            statusText.text = "STORAGE LOW"
+            return
+        }
         val sessionId = ++recordingSessionId
         if (!gpsTrackRecording && gpsEnabled && segmentNumber == 1) beginGpsRecording()
         val pending = r.prepareRecording(this, makeOutputOptions())
