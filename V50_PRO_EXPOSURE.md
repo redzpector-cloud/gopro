@@ -1,4 +1,4 @@
-# JejakCam V50 — Pro Exposure
+# JejakCam V51 — Pro Exposure
 
 Fokus: exposure yang stabil dan mudah dikontrol untuk kualitas video.
 
