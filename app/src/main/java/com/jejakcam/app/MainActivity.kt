@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.PowerManager
 import android.provider.MediaStore
 import android.view.Gravity
 import android.view.View
@@ -169,6 +170,50 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var loopMode = "ON"
     private val timerHandler = Handler(Looper.getMainLooper())
     private val storageHandler = Handler(Looper.getMainLooper())
+    // V64: thermal/battery safety monitor for long action-camera sessions.
+    private val thermalHandler = Handler(Looper.getMainLooper())
+    private var thermalStopTriggered = false
+    private val thermalRunnable = object : Runnable {
+        override fun run() {
+            checkThermalAndBatterySafety()
+            thermalHandler.postDelayed(this, 5000L)
+        }
+    }
+
+    private fun checkThermalAndBatterySafety() {
+        if (recording == null || recordingFinalizing || activityStopping) return
+        try {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val thermal = pm.currentThermalStatus
+                if (!thermalStopTriggered && thermal >= PowerManager.THERMAL_STATUS_SEVERE) {
+                    thermalStopTriggered = true
+                    stopRequestedByUser = true
+                    stoppingForLoop = false
+                    loopRemainingMs = 0L
+                    recordingFinalizing = true
+                    timerHandler.removeCallbacksAndMessages("LOOP_STOP")
+                    Toast.makeText(this, "HP terlalu panas • rekaman dihentikan aman", Toast.LENGTH_LONG).show()
+                    recording?.stop()
+                    return
+                }
+            }
+            val battery = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
+            val level = battery.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (!thermalStopTriggered && level in 0..4) {
+                thermalStopTriggered = true
+                stopRequestedByUser = true
+                stoppingForLoop = false
+                loopRemainingMs = 0L
+                recordingFinalizing = true
+                timerHandler.removeCallbacksAndMessages("LOOP_STOP")
+                Toast.makeText(this, "Baterai sangat rendah • rekaman dihentikan aman", Toast.LENGTH_LONG).show()
+                recording?.stop()
+            }
+        } catch (_: Throwable) {
+            // Safety monitor must never crash the camera UI.
+        }
+    }
     // V62: storage safety guard. Stop the active recording before Android/MediaStore
     // reaches critically low free space, while leaving a small reserve for finalization.
     private var lowStorageStopTriggered = false
@@ -294,6 +339,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         buildUi()
         updateGpsStatus()
         storageHandler.post(storageRunnable)
+        thermalHandler.post(thermalRunnable)
         updateStorageHud()
         // V17: kamera TIDAK otomatis aktif saat aplikasi baru dibuka.
         // V57: onResume() may restore it only when state came from a prior
@@ -1290,6 +1336,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 is VideoRecordEvent.Start -> {
                     recordingStartedAt = System.currentTimeMillis()
                     recordingPaused = false
+                    thermalStopTriggered = false
                     statusText.text = if (loopRecordingOn) "● REC • LOOP" else "● REC"
                     loopText.text = if (loopRecordingOn) "SEG %02d • NEXT %s".format(segmentNumber, loopDurationLabel) else "SEG %02d".format(segmentNumber)
                     timerHandler.removeCallbacks(timerRunnable)
@@ -1323,6 +1370,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         recording = null
                         recordingFinalizing = false
                         lowStorageStopTriggered = false
+                        thermalStopTriggered = false
                         stoppingForLoop = false
                         stopRequestedByUser = false
                         finishGpsRecording(saveTrack = true)
@@ -1338,6 +1386,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         recording = null
                         recordingFinalizing = false
                         lowStorageStopTriggered = false
+                        thermalStopTriggered = false
                         stoppingForLoop = false
                         stopRequestedByUser = false
                         finishGpsRecording(saveTrack = true)
@@ -1817,6 +1866,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         backgroundCameraRelease = false
         cameraStartToken++
         storageHandler.removeCallbacksAndMessages(null)
+        thermalHandler.removeCallbacksAndMessages(null)
         timerHandler.removeCallbacksAndMessages(null)
         countdownActive = false
         stoppingForLoop = false
