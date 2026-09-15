@@ -1,4 +1,4 @@
-# JejakCam V43 — Stabilization Pro
+# JejakCam V44 — Stabilization Pro
 
 Fokus:
 - EIS stabilization yang lebih stabil saat merekam.
