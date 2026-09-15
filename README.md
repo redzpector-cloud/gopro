@@ -14,3 +14,6 @@ Catatan: horizon assist adalah indikator level; koreksi horizon video penuh teta
 - Nama aplikasi: JEJAK CAM PRO
 - Nama APK artifact: JEJAK_CAM_PRO.apk
 - Versi: 1.1.3 (versionCode 14).
+
+## V54
+Stability patch untuk lifecycle CameraX dan callback kamera tertunda. Lihat `V54_CAMERA_STABILITY.md`.

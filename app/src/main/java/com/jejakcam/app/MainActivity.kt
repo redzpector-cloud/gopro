@@ -141,6 +141,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var selectedQualityLabel = "1080P"
     private var cameraActive = false
     private var requestedPhotoMode = false
+    // V54: invalidates queued CameraX callbacks when the camera is closed/reconfigured.
+    private var cameraStartToken = 0L
 
     // V53: separate function state (AUTO/ON/OFF) from HUD visibility (SHOW/HIDE).
     private val prefs by lazy { getSharedPreferences("jejakcam_settings", MODE_PRIVATE) }
@@ -900,8 +902,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun startCamera(withAudio: Boolean) {
+        val startToken = ++cameraStartToken
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
+            if (startToken != cameraStartToken || isFinishing || isDestroyed) return@addListener
             val provider = future.get()
 
             // Action-camera tuning: continuous video AF + video stabilization.
@@ -963,6 +967,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
             provider.unbindAll()
             try {
+                if (startToken != cameraStartToken || isFinishing || isDestroyed) return@addListener
                 camera = provider.bindToLifecycle(
                     this,
                     currentCameraSelector(),
@@ -989,6 +994,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 // If preview stabilization causes a device-specific HAL error, retry
                 // once without preview stabilization but keep recording stabilization.
                 try {
+                    if (startToken != cameraStartToken || isFinishing || isDestroyed) return@addListener
                     provider.unbindAll()
                     val fallbackPreviewBuilder = Preview.Builder()
                     Camera2Interop.Extender(fallbackPreviewBuilder)
@@ -1299,6 +1305,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun closeCamera() {
+        cameraStartToken++
         if (recording != null) {
             Toast.makeText(this, "Hentikan rekaman terlebih dahulu", Toast.LENGTH_SHORT).show()
             return
@@ -1640,6 +1647,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     override fun onDestroy() {
+        cameraStartToken++
         storageHandler.removeCallbacksAndMessages(null)
         timerHandler.removeCallbacksAndMessages(null)
         recording?.stop()
