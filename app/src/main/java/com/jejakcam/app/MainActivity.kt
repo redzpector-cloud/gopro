@@ -169,10 +169,32 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var loopMode = "ON"
     private val timerHandler = Handler(Looper.getMainLooper())
     private val storageHandler = Handler(Looper.getMainLooper())
+    // V62: storage safety guard. Stop the active recording before Android/MediaStore
+    // reaches critically low free space, while leaving a small reserve for finalization.
+    private var lowStorageStopTriggered = false
     private val storageRunnable = object : Runnable {
         override fun run() {
             if (::storageText.isInitialized) updateStorageHud()
+            checkLowStorageSafety()
             storageHandler.postDelayed(this, 3000L)
+        }
+    }
+
+    private fun checkLowStorageSafety() {
+        if (recording == null || recordingFinalizing || activityStopping) return
+        val (free, total) = storageInfo()
+        if (free <= 0L || total <= 0L) return
+        val freePct = free.toDouble() / total.toDouble() * 100.0
+        // Keep a 256 MB reserve and also protect very small volumes at 1%.
+        if (!lowStorageStopTriggered && (free <= 256L * 1024L * 1024L || freePct <= 1.0)) {
+            lowStorageStopTriggered = true
+            stopRequestedByUser = true
+            stoppingForLoop = false
+            loopRemainingMs = 0L
+            recordingFinalizing = true
+            timerHandler.removeCallbacksAndMessages("LOOP_STOP")
+            Toast.makeText(this, "Penyimpanan hampir penuh • rekaman dihentikan aman", Toast.LENGTH_LONG).show()
+            recording?.stop()
         }
     }
 
@@ -1284,6 +1306,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         Toast.makeText(this, "Gagal menyimpan video: ${event.error}", Toast.LENGTH_LONG).show()
                         recording = null
                         recordingFinalizing = false
+                        lowStorageStopTriggered = false
                         stoppingForLoop = false
                         stopRequestedByUser = false
                         finishGpsRecording(saveTrack = true)
@@ -1298,6 +1321,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     } else {
                         recording = null
                         recordingFinalizing = false
+                        lowStorageStopTriggered = false
                         stoppingForLoop = false
                         stopRequestedByUser = false
                         finishGpsRecording(saveTrack = true)
@@ -1443,6 +1467,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         segmentNumber = 1
         recordingFinalizing = false
+        lowStorageStopTriggered = false
         stoppingForLoop = false
         stopRequestedByUser = false
         recordingPaused = false
