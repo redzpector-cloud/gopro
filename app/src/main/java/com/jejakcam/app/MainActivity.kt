@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var exposureText: TextView
     private lateinit var tiltText: TextView
     private lateinit var batteryText: TextView
+    private lateinit var storageText: TextView
     private lateinit var gpsText: TextView
     private lateinit var compassText: TextView
     private lateinit var gpsStatsText: TextView
@@ -136,6 +137,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var cameraActive = false
     private var requestedPhotoMode = false
     private val timerHandler = Handler(Looper.getMainLooper())
+    private val storageHandler = Handler(Looper.getMainLooper())
+    private val storageRunnable = object : Runnable {
+        override fun run() {
+            if (::storageText.isInitialized) updateStorageHud()
+            storageHandler.postDelayed(this, 3000L)
+        }
+    }
+
     private val timerRunnable = object : Runnable {
         override fun run() {
             if (recording != null) {
@@ -152,6 +161,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     loopText.text = if (recordingPaused) "PAUSED • SEG %02d".format(segmentNumber) else "SEG %02d".format(segmentNumber)
                     loopText.alpha = .72f
                 }
+                updateStorageHud()
                 timerHandler.postDelayed(this, 500)
             }
         }
@@ -218,6 +228,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         })
         buildUi()
         updateGpsStatus()
+        storageHandler.post(storageRunnable)
+        updateStorageHud()
         // V17: kamera TIDAK otomatis aktif saat aplikasi dibuka.
         // Pengguna harus menekan "BUKA KAMERA" terlebih dahulu.
         cameraActive = false
@@ -327,6 +339,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         batteryText = textView("●  --%", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(9),0,dp(9),0) }
         hud.addView(batteryText, FrameLayout.LayoutParams(dp(76), dp(38), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(14) })
+
+        storageText = textView("STOR --", 9f, true).apply {
+            background = getDrawable(R.drawable.bg_chip)
+            setPadding(dp(8), 0, dp(8), 0)
+            setOnClickListener {
+                Toast.makeText(this@MainActivity, storageDetails(), Toast.LENGTH_SHORT).show()
+            }
+        }
+        hud.addView(storageText, FrameLayout.LayoutParams(dp(112), dp(30), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(106) })
 
         gpsText = textView("GPS OFF", 10f, true).apply {
             background = getDrawable(R.drawable.bg_toggle)
@@ -1252,6 +1273,56 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         gpsText.text = String.format("GPS ON • %.0f km/h%s", lastSpeedKmh, accuracy)
     }
 
+    private fun storageInfo(): Pair<Long, Long> {
+        return try {
+            val stat = android.os.StatFs(android.os.Environment.getExternalStorageDirectory().path)
+            val free = stat.availableBytes
+            val total = stat.totalBytes
+            Pair(free, total)
+        } catch (_: Exception) { Pair(0L, 0L) }
+    }
+
+    private fun formatStorage(bytes: Long): String {
+        val gb = bytes / 1_000_000_000.0
+        return if (gb >= 10) String.format(java.util.Locale.US, "%.0f GB", gb)
+        else String.format(java.util.Locale.US, "%.1f GB", gb)
+    }
+
+    private fun estimatedBitrateBytesPerSecond(): Double {
+        return if (selectedQuality == Quality.UHD) 20_000_000.0 / 8.0 else 8_000_000.0 / 8.0
+    }
+
+    private fun storageDetails(): String {
+        val (free, total) = storageInfo()
+        if (free <= 0L || total <= 0L) return "Penyimpanan tidak dapat dibaca"
+        val hours = (free / estimatedBitrateBytesPerSecond() / 3600.0)
+        val remaining = if (hours >= 1) String.format(java.util.Locale.US, "%.1f jam", hours)
+        else String.format(java.util.Locale.US, "%.0f menit", hours * 60.0)
+        return "Kosong ${formatStorage(free)} dari ${formatStorage(total)} • estimasi ${remaining}"
+    }
+
+    private fun updateStorageHud() {
+        if (!::storageText.isInitialized) return
+        val (free, total) = storageInfo()
+        if (free <= 0L || total <= 0L) {
+            storageText.text = "STOR --"
+            return
+        }
+        val freePct = (free.toDouble() / total.toDouble() * 100.0).coerceIn(0.0, 100.0)
+        val minutes = free / estimatedBitrateBytesPerSecond() / 60.0
+        val time = if (minutes >= 60) String.format(java.util.Locale.US, "%.1fh", minutes / 60.0)
+        else String.format(java.util.Locale.US, "%.0fm", minutes)
+        storageText.text = "FREE ${formatStorage(free)} • $time"
+        storageText.alpha = if (freePct <= 5.0) .98f else .82f
+        if (freePct <= 2.0) {
+            storageText.setTextColor(0xFFFF5252.toInt())
+        } else if (freePct <= 5.0) {
+            storageText.setTextColor(0xFFFFC107.toInt())
+        } else {
+            storageText.setTextColor(Color.WHITE)
+        }
+    }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -1318,6 +1389,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     override fun onDestroy() {
+        storageHandler.removeCallbacksAndMessages(null)
+        timerHandler.removeCallbacksAndMessages(null)
         recording?.stop()
         timerHandler.removeCallbacksAndMessages(null)
         sensorManager.unregisterListener(this)
