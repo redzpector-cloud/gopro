@@ -1489,6 +1489,19 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
             override fun onError(exception: ImageCaptureException) {
                 photoCaptureInProgress = false
+                // V68: CameraX may have created the MediaStore row before the
+                // capture failed. Remove that pending row so a failed capture
+                // never leaves an empty/unfinished item in the gallery.
+                try {
+                    val selection = "${MediaStore.Images.Media.DISPLAY_NAME}=? AND " +
+                        "${MediaStore.Images.Media.RELATIVE_PATH}=?"
+                    val args = arrayOf(name, "Pictures/JejakCam/")
+                    contentResolver.delete(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        selection,
+                        args
+                    )
+                } catch (_: Exception) { }
                 Toast.makeText(this@MainActivity, "Gagal mengambil foto: ${exception.message}", Toast.LENGTH_LONG).show()
             }
         })
