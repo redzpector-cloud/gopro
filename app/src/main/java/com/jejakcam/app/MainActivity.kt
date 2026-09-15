@@ -115,7 +115,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var wideMode = false
     private var horizonLockOn = true
     private var loopRecordingOn = true
+    // V34: loop segment duration is selectable from the camera HUD.
     private var loopDurationMs = 3 * 60 * 1000L
+    private var loopDurationLabel = "3m"
     private var recordingStartedAt = 0L
     private var audioEnhancementOn = true
     private var audioEnabled = true
@@ -283,12 +285,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "V26: 4K/1080P • EIS • Gyro • Horizon HUD • MIC • TIMER • PAUSE • LOOP", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { Toast.makeText(this@MainActivity, "V34: 4K/1080P • EIS • Gyro • Horizon HUD • MIC • TIMER • PAUSE • LOOP 1/3/5/10m", Toast.LENGTH_SHORT).show() }
         }
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V28  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V34  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -424,7 +426,41 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         val quickRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         val quick=textView("QUICK REC",10f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{toggleRecording()}}
-        val loop=textView("LOOP 3m",10f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{loopRecordingOn=!loopRecordingOn;text=if(loopRecordingOn)"LOOP 3m" else "LOOP OFF"}}
+        val loop=textView("LOOP 3m",10f,true).apply{
+            background=getDrawable(R.drawable.bg_control)
+            setOnClickListener{
+                if (recording != null || countdownActive) {
+                    Toast.makeText(this@MainActivity, "Hentikan/ batalkan REC dulu untuk mengubah LOOP", Toast.LENGTH_SHORT).show()
+                } else {
+                    // V34: OFF -> 1m -> 3m -> 5m -> 10m -> OFF
+                    when {
+                        !loopRecordingOn -> {
+                            loopRecordingOn = true
+                            loopDurationMs = 1 * 60 * 1000L
+                            loopDurationLabel = "1m"
+                        }
+                        loopDurationMs == 1 * 60 * 1000L -> {
+                            loopDurationMs = 3 * 60 * 1000L
+                            loopDurationLabel = "3m"
+                        }
+                        loopDurationMs == 3 * 60 * 1000L -> {
+                            loopDurationMs = 5 * 60 * 1000L
+                            loopDurationLabel = "5m"
+                        }
+                        loopDurationMs == 5 * 60 * 1000L -> {
+                            loopDurationMs = 10 * 60 * 1000L
+                            loopDurationLabel = "10m"
+                        }
+                        else -> {
+                            loopRecordingOn = false
+                            loopDurationLabel = "OFF"
+                        }
+                    }
+                    text = if (loopRecordingOn) "LOOP $loopDurationLabel" else "LOOP OFF"
+                    statusText.text = if (loopRecordingOn) "LOOP $loopDurationLabel • SIAP" else "LOOP OFF • SIAP"
+                }
+            }
+        }
         val mic=textView("MIC ON",10f,true).apply{
             background=getDrawable(R.drawable.bg_control)
             setOnClickListener{
