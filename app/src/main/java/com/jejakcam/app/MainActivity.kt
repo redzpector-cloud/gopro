@@ -152,6 +152,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     // V58: lifecycle-safe recording finalization. Prevents a loop segment from
     // starting again after the Activity has been stopped/destroyed.
     private var activityStopping = false
+    // V60: identifies the active recording session so late callbacks from an older
+    // CameraX Recording cannot alter the current session or restart a loop segment.
+    private var recordingSessionId = 0L
 
     // V53: separate function state (AUTO/ON/OFF) from HUD visibility (SHOW/HIDE).
     private val prefs by lazy { getSharedPreferences("jejakcam_settings", MODE_PRIVATE) }
@@ -370,7 +373,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V59  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V60  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -1224,16 +1227,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun startSegment() {
         if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
         val r = recorder ?: return
+        if (recording != null || stoppingForLoop || stopRequestedByUser) return
+        val sessionId = ++recordingSessionId
         if (!gpsTrackRecording && gpsEnabled && segmentNumber == 1) beginGpsRecording()
         val pending = r.prepareRecording(this, makeOutputOptions())
         val prepared = if (audioEnabled && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             pending.withAudioEnabled()
         } else pending
         recording = prepared.start(ContextCompat.getMainExecutor(this)) { event ->
+            // V60: ignore callbacks belonging to a previous recording session.
+            if (sessionId != recordingSessionId) return@start
             // V59: ignore late CameraX callbacks after Activity teardown.
             if (activityStopping || isFinishing || isDestroyed) {
                 if (event is VideoRecordEvent.Finalize) {
-                    recording = null
+                    if (sessionId == recordingSessionId) recording = null
                     stoppingForLoop = false
                     stopRequestedByUser = false
                 }
@@ -1298,8 +1305,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun scheduleLoopStop(delayMs: Long) {
         timerHandler.removeCallbacksAndMessages("LOOP_STOP")
+        val sessionId = recordingSessionId
         timerHandler.postAtTime({
-            if (recording != null && !stoppingForLoop && !stopRequestedByUser && loopRecordingOn && !recordingPaused) {
+            if (sessionId == recordingSessionId && recording != null && !stoppingForLoop && !stopRequestedByUser && loopRecordingOn && !recordingPaused) {
                 stoppingForLoop = true
                 stopRequestedByUser = false
                 loopRemainingMs = 0L
@@ -1430,6 +1438,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         stoppingForLoop = false
         stopRequestedByUser = false
         recordingPaused = false
+        recordingSessionId++
         if (gpsEnabled) resetGpsTrackStats()
         if (countdownSeconds > 0) {
             countdownActive = true
