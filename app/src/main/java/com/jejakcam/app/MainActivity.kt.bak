@@ -149,9 +149,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     // V55: remembers a lens/zoom request while CameraX is rebinding.
     private var pendingZoomPreset: Float? = null
     private var cameraRebindInProgress = false
-    // V58: lifecycle-safe recording finalization. Prevents a loop segment from
-    // starting again after the Activity has been stopped/destroyed.
-    private var activityStopping = false
 
     // V53: separate function state (AUTO/ON/OFF) from HUD visibility (SHOW/HIDE).
     private val prefs by lazy { getSharedPreferences("jejakcam_settings", MODE_PRIVATE) }
@@ -370,7 +367,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V58  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V52  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -1222,7 +1219,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun startSegment() {
-        if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
         val r = recorder ?: return
         if (!gpsTrackRecording && gpsEnabled && segmentNumber == 1) beginGpsRecording()
         val pending = r.prepareRecording(this, makeOutputOptions())
@@ -1261,7 +1257,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     }
                 }
                 is VideoRecordEvent.Finalize -> {
-                    timerHandler.removeCallbacksAndMessages("LOOP_STOP")
                     if (event.hasError()) {
                         Toast.makeText(this, "Gagal menyimpan video: ${event.error}", Toast.LENGTH_LONG).show()
                         recording = null
@@ -1269,7 +1264,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         stopRequestedByUser = false
                         finishGpsRecording(saveTrack = true)
                         resetRecordUi()
-                    } else if (stoppingForLoop && loopRecordingOn && !stopRequestedByUser && !activityStopping && !isFinishing && !isDestroyed && cameraActive) {
+                    } else if (stoppingForLoop && loopRecordingOn && !stopRequestedByUser) {
                         recording = null
                         segmentNumber++
                         loopText.text = "SEG %02d".format(segmentNumber)
@@ -1665,7 +1660,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     override fun onResume() {
-        activityStopping = false
         super.onResume()
         rotationSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
         gyroSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
@@ -1687,7 +1681,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     override fun onStop() {
-        activityStopping = true
         // Do not tear down an active recording. CameraX can finish the recording
         // lifecycle without us destroying its use cases here. For an idle camera,
         // release the binding so Android can safely reclaim the camera while the app
@@ -1745,7 +1738,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     override fun onDestroy() {
-        activityStopping = true
         cameraRequested = false
         backgroundCameraRelease = false
         cameraStartToken++
