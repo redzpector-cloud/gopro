@@ -1464,19 +1464,19 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             }
         }
-        val savedUri = contentResolver.insert(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
-        )
-        if (savedUri == null) {
-            photoCaptureInProgress = false
-            Toast.makeText(this, "Tidak bisa membuat file foto", Toast.LENGTH_LONG).show()
-            return
-        }
-        val output = ImageCapture.OutputFileOptions.Builder(contentResolver, savedUri).build()
+        // CameraX 1.4.x requires the MediaStore collection AND ContentValues.
+        // Let CameraX create the MediaStore row so the returned savedUri belongs
+        // to the actual capture operation.
+        val output = ImageCapture.OutputFileOptions.Builder(
+            contentResolver,
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            values
+        ).build()
         capture.takePicture(output, ContextCompat.getMainExecutor(this), object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                 photoCaptureInProgress = false
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val savedUri = outputFileResults.savedUri
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && savedUri != null) {
                     try {
                         val publish = ContentValues().apply {
                             put(MediaStore.Images.Media.IS_PENDING, 0)
@@ -1489,7 +1489,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
             override fun onError(exception: ImageCaptureException) {
                 photoCaptureInProgress = false
-                try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
                 Toast.makeText(this@MainActivity, "Gagal mengambil foto: ${exception.message}", Toast.LENGTH_LONG).show()
             }
         })
