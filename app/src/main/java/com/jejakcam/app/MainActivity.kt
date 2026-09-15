@@ -1504,8 +1504,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         val publish = ContentValues().apply {
                             put(MediaStore.Images.Media.IS_PENDING, 0)
                         }
-                        contentResolver.update(savedUri, publish, null, null)
-                    } catch (_: Exception) { }
+                        val updated = contentResolver.update(savedUri, publish, null, null)
+                        if (updated <= 0) {
+                            // V72: do not leave a pending MediaStore item if it cannot be published.
+                            try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
+                            statusText.text = "PHOTO PUBLISH FAILED"
+                            Toast.makeText(this@MainActivity, "Foto gagal dipublikasikan ke Galeri", Toast.LENGTH_LONG).show()
+                            return
+                        }
+                    } catch (_: Exception) {
+                        // V72: best-effort cleanup of the exact capture URI.
+                        try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
+                        statusText.text = "PHOTO PUBLISH FAILED"
+                        Toast.makeText(this@MainActivity, "Foto gagal diselesaikan", Toast.LENGTH_LONG).show()
+                        return
+                    }
                 }
                 statusText.text = "PHOTO SAVED"
                 Toast.makeText(this@MainActivity, "Foto tersimpan di Galeri > Pictures > JejakCam", Toast.LENGTH_SHORT).show()
