@@ -158,6 +158,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var recordingSessionId = 0L
     // V61: blocks a new recording while CameraX is finalizing the previous file.
     private var recordingFinalizing = false
+    // V65: prevents rapid repeated PHOTO taps from queuing multiple captures.
+    private var photoCaptureInProgress = false
 
     // V53: separate function state (AUTO/ON/OFF) from HUD visibility (SHOW/HIDE).
     private val prefs by lazy { getSharedPreferences("jejakcam_settings", MODE_PRIVATE) }
@@ -1444,8 +1446,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun capturePhoto() {
+        if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
+        if (photoCaptureInProgress) {
+            Toast.makeText(this, "Foto sedang diproses", Toast.LENGTH_SHORT).show()
+            return
+        }
         val capture = imageCapture ?: return
-        val name = String.format("JejakCam_%tY%<tm%<td_%<tH%<tM%<tS.jpg", java.util.Date())
+        photoCaptureInProgress = true
+        val name = String.format("JejakCam_%tY%<tm%<td_%<tH%<tM%<tS_%<L.jpg", java.util.Date())
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -1454,10 +1462,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val output = ImageCapture.OutputFileOptions.Builder(contentResolver, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values).build()
         capture.takePicture(output, ContextCompat.getMainExecutor(this), object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                photoCaptureInProgress = false
                 statusText.text = "PHOTO SAVED"
                 Toast.makeText(this@MainActivity, "Foto tersimpan di Galeri > Pictures > JejakCam", Toast.LENGTH_SHORT).show()
             }
             override fun onError(exception: ImageCaptureException) {
+                photoCaptureInProgress = false
                 Toast.makeText(this@MainActivity, "Gagal mengambil foto: ${exception.message}", Toast.LENGTH_LONG).show()
             }
         })
@@ -1862,6 +1872,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onDestroy() {
         activityStopping = true
+        photoCaptureInProgress = false
         cameraRequested = false
         backgroundCameraRelease = false
         cameraStartToken++
