@@ -31,6 +31,7 @@ import androidx.camera.core.Preview
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.UseCase
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
 import androidx.camera.view.PreviewView
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var zoomRatio = 1f
     private var stabilizationOn = true
     private var exposureIndex = 0
+    private var aeAfLockOn = false
     private var wideMode = false
     private var horizonLockOn = true
     private var loopRecordingOn = true
@@ -272,6 +274,24 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
 
+        // V37: tap-to-focus + AE/AF lock. A tap meters/focuses at the selected point;
+        // when LOCK is enabled, the focus action is held and the current EV is kept.
+        previewView.setOnTouchListener { _, event ->
+            if (event.action == android.view.MotionEvent.ACTION_UP && cameraActive && recording == null) {
+                val cam = camera
+                if (cam != null && !aeAfLockOn) {
+                    val factory = previewView.meteringPointFactory
+                    val point = factory.createPoint(event.x, event.y)
+                    val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+                        .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                        .build()
+                    cam.cameraControl.startFocusAndMetering(action)
+                    Toast.makeText(this, "FOCUS / EXPOSURE", Toast.LENGTH_SHORT).show()
+                }
+            }
+            true
+        }
+
         // ===================== HOME / CAMERA OFF =====================
         val home = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -308,12 +328,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "V34: 4K/1080P • EIS • Gyro • Horizon HUD • MIC • TIMER • PAUSE • LOOP 1/3/5/10m", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { Toast.makeText(this@MainActivity, "V37: AE/AF LOCK • TAP FOCUS • 4K/1080P • EIS • GYRO • HORIZON • MIC • LOOP", Toast.LENGTH_SHORT).show() }
         }
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V35  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V37  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -418,6 +438,41 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val ep=Button(this).apply{text="+";textSize=18f;setTextColor(Color.WHITE);background=getDrawable(R.drawable.bg_zoom);setOnClickListener{changeExposure(1)}}
         exposurePanel.addView(em,LinearLayout.LayoutParams(dp(42),dp(42))); exposurePanel.addView(exposureText,LinearLayout.LayoutParams(dp(48),dp(42))); exposurePanel.addView(ep,LinearLayout.LayoutParams(dp(42),dp(42)))
         hud.addView(exposurePanel,FrameLayout.LayoutParams(dp(136),dp(46),Gravity.START or Gravity.CENTER_VERTICAL).apply{leftMargin=dp(12)})
+
+        val aeAfLock = textView("AE/AF",10f,true).apply {
+            background = getDrawable(R.drawable.bg_control)
+            setOnClickListener {
+                val cam = camera
+                if (cam == null) {
+                    Toast.makeText(this@MainActivity, "Kamera belum aktif", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                aeAfLockOn = !aeAfLockOn
+                if (aeAfLockOn) {
+                    val factory = previewView.meteringPointFactory
+                    val point = factory.createPoint(previewView.width / 2f, previewView.height / 2f)
+                    val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+                        .disableAutoCancel()
+                        .build()
+                    cam.cameraControl.startFocusAndMetering(action)
+                    cam.cameraControl.setExposureCompensationIndex(exposureIndex)
+                    text = "AE/AF LOCK"
+                    alpha = 1f
+                    Toast.makeText(this@MainActivity, "AE/AF dikunci di tengah frame", Toast.LENGTH_SHORT).show()
+                } else {
+                    text = "AE/AF"
+                    alpha = .72f
+                    val factory = previewView.meteringPointFactory
+                    val point = factory.createPoint(previewView.width / 2f, previewView.height / 2f)
+                    val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+                        .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                        .build()
+                    cam.cameraControl.startFocusAndMetering(action)
+                    Toast.makeText(this@MainActivity, "AE/AF kembali AUTO", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        hud.addView(aeAfLock, FrameLayout.LayoutParams(dp(92),dp(40),Gravity.START or Gravity.CENTER_VERTICAL).apply{leftMargin=dp(154)})
 
         val bottomShade=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL;setPadding(dp(18),dp(10),dp(18),dp(10));background=getDrawable(R.drawable.bg_bottom)}
         val modeRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
@@ -730,6 +785,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 recordButton.alpha = 1f
                 setZoom(0f)
                 exposureIndex = 0
+                aeAfLockOn = false
                 camera?.cameraControl?.setExposureCompensationIndex(0)
                 exposureText.text = "EV 0"
                 statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
