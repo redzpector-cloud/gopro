@@ -1,4 +1,4 @@
-# JejakCam V48 — Motion Clarity
+# JejakCam V49 — Motion Clarity
 
 Fokus: menjaga detail video tetap jelas saat kamera bergerak.
 
@@ -17,4 +17,4 @@ Preset:
 - ACTION: prioritaskan gerakan cepat.
 - DETAIL: prioritaskan detail saat kamera relatif tenang.
 
-V48 Sharpness tetap dipertahankan; Motion Clarity harus bekerja bersama sharpening agar detail tidak terlihat bergetar/berhalo.
+V49 Sharpness tetap dipertahankan; Motion Clarity harus bekerja bersama sharpening agar detail tidak terlihat bergetar/berhalo.

@@ -1,4 +1,4 @@
-# JejakCam V48 — Audio Pro
+# JejakCam V49 — Audio Pro
 
 Fokus: audio video yang lebih jelas dan stabil.
 
@@ -13,7 +13,7 @@ Target:
 - Jika API audio tertentu tidak didukung, fallback ke microphone normal tanpa crash.
 - Audio tetap sinkron dengan video.
 - Loop Recording tetap membuat segment dengan audio yang benar.
-- Semua fitur V48: Low Light Pro, Stabilization Pro, HDR, AE/AF Lock, Video Quality Pro, Smart Storage dan Quick REC tetap dipertahankan.
+- Semua fitur V49: Low Light Pro, Stabilization Pro, HDR, AE/AF Lock, Video Quality Pro, Smart Storage dan Quick REC tetap dipertahankan.
 
 Prioritas:
 1. Suara jelas.
