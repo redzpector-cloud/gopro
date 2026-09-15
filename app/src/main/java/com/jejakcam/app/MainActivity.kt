@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var cameraButton: Button
     private lateinit var recordIcon: TextView
     private lateinit var timerText: TextView
+    private lateinit var loopText: TextView
     private lateinit var statusText: TextView
     private lateinit var zoomText: TextView
     private lateinit var stabilizationText: TextView
@@ -141,6 +142,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 val elapsed = System.currentTimeMillis() - recordingStartedAt
                 val seconds = elapsed / 1000
                 timerText.text = String.format("%02d:%02d", seconds / 60, seconds % 60)
+                if (loopRecordingOn && loopDeadlineMs > 0L && !recordingPaused) {
+                    val remaining = (loopDeadlineMs - System.currentTimeMillis()).coerceAtLeast(0L)
+                    val rm = remaining / 60000
+                    val rs = (remaining / 1000) % 60
+                    loopText.text = String.format("SEG %02d • NEXT %02d:%02d", segmentNumber, rm, rs)
+                    loopText.alpha = if (remaining <= 10000L) .95f else .72f
+                } else {
+                    loopText.text = if (recordingPaused) "PAUSED • SEG %02d".format(segmentNumber) else "SEG %02d".format(segmentNumber)
+                    loopText.alpha = .72f
+                }
                 timerHandler.postDelayed(this, 500)
             }
         }
@@ -290,7 +301,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V34  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V35  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -350,12 +361,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         hud.addView(statusText, FrameLayout.LayoutParams(dp(96), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(62) })
         timerText = textView("00:00", 15f, true)
         hud.addView(timerText, FrameLayout.LayoutParams(dp(100), dp(38), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(94) })
+        loopText = textView("SEG 01", 9f, true).apply { alpha = .72f }
+        hud.addView(loopText, FrameLayout.LayoutParams(dp(170), dp(26), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(122) })
 
         horizonText = textView("— LEVEL • SMOOTH —", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.88f }
-        hud.addView(horizonText, FrameLayout.LayoutParams(dp(142), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(136) })
+        hud.addView(horizonText, FrameLayout.LayoutParams(dp(142), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(152) })
 
         tiltText = textView("ROLL 0°  •  PITCH 0°", 10f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.78f }
-        hud.addView(tiltText, FrameLayout.LayoutParams(dp(150), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(174) })
+        hud.addView(tiltText, FrameLayout.LayoutParams(dp(150), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(190) })
 
         val horizonToggle = textView("HORIZON ON", 11f, true).apply {
             background=getDrawable(R.drawable.bg_toggle)
@@ -457,6 +470,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         }
                     }
                     text = if (loopRecordingOn) "LOOP $loopDurationLabel" else "LOOP OFF"
+                    loopText.text = if (loopRecordingOn) "LOOP $loopDurationLabel • SEG 01" else "SEG 01"
                     statusText.text = if (loopRecordingOn) "LOOP $loopDurationLabel • SIAP" else "LOOP OFF • SIAP"
                 }
             }
@@ -874,6 +888,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         loopDeadlineMs = 0L
         loopRemainingMs = 0L
         timerText.text = "00:00"
+        loopText.text = "SEG 01"
+        loopText.alpha = .72f
         statusText.text = "READY"
         if (::pauseButton.isInitialized) { pauseButton.text = "PAUSE"; pauseButton.alpha = .5f }
         recordButton.background = getDrawable(R.drawable.bg_record)
@@ -893,7 +909,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 is VideoRecordEvent.Start -> {
                     recordingStartedAt = System.currentTimeMillis()
                     recordingPaused = false
-                    statusText.text = if (loopRecordingOn) "REC • LOOP" else "REC"
+                    statusText.text = if (loopRecordingOn) "● REC • LOOP" else "● REC"
+                    loopText.text = if (loopRecordingOn) "SEG %02d • NEXT %s".format(segmentNumber, loopDurationLabel) else "SEG %02d".format(segmentNumber)
                     timerHandler.removeCallbacks(timerRunnable)
                     timerHandler.post(timerRunnable)
                     recordButton.background = getDrawable(R.drawable.bg_record_active)
@@ -909,7 +926,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
                 is VideoRecordEvent.Resume -> {
                     recordingPaused = false
-                    statusText.text = if (loopRecordingOn) "REC • LOOP" else "REC"
+                    statusText.text = if (loopRecordingOn) "● REC • LOOP" else "● REC"
+                    loopText.text = if (loopRecordingOn) "SEG %02d • NEXT %s".format(segmentNumber, loopDurationLabel) else "SEG %02d".format(segmentNumber)
                     timerHandler.removeCallbacks(timerRunnable)
                     timerHandler.post(timerRunnable)
                     if (loopRecordingOn && loopRemainingMs > 0L) {
@@ -928,6 +946,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     } else if (stoppingForLoop && loopRecordingOn && !stopRequestedByUser) {
                         recording = null
                         segmentNumber++
+                        loopText.text = "SEG %02d".format(segmentNumber)
                         stoppingForLoop = false
                         startSegment()
                     } else {
