@@ -16,7 +16,7 @@ android {
         jvmTarget = "17"
     }
 
-    defaultConfig { applicationId = "com.jejakcam.app"; minSdk = 24; targetSdk = 35; versionCode = 50; versionName = "1.51.0" }
+    defaultConfig { applicationId = "com.jejakcam.app"; minSdk = 24; targetSdk = 35; versionCode = 51; versionName = "1.52.0" }
 }
 
 dependencies {

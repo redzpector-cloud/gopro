@@ -1454,20 +1454,42 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val capture = imageCapture ?: return
         photoCaptureInProgress = true
         val name = String.format("JejakCam_%tY%<tm%<td_%<tH%<tM%<tS_%<L.jpg", java.util.Date())
+        // V66: create the MediaStore row first so a failed/aborted capture can be
+        // removed cleanly instead of leaving an empty or half-written photo.
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
             put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/JejakCam")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
         }
-        val output = ImageCapture.OutputFileOptions.Builder(contentResolver, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values).build()
+        val savedUri = contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+        )
+        if (savedUri == null) {
+            photoCaptureInProgress = false
+            Toast.makeText(this, "Tidak bisa membuat file foto", Toast.LENGTH_LONG).show()
+            return
+        }
+        val output = ImageCapture.OutputFileOptions.Builder(contentResolver, savedUri).build()
         capture.takePicture(output, ContextCompat.getMainExecutor(this), object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                 photoCaptureInProgress = false
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    try {
+                        val publish = ContentValues().apply {
+                            put(MediaStore.Images.Media.IS_PENDING, 0)
+                        }
+                        contentResolver.update(savedUri, publish, null, null)
+                    } catch (_: Exception) { }
+                }
                 statusText.text = "PHOTO SAVED"
                 Toast.makeText(this@MainActivity, "Foto tersimpan di Galeri > Pictures > JejakCam", Toast.LENGTH_SHORT).show()
             }
             override fun onError(exception: ImageCaptureException) {
                 photoCaptureInProgress = false
+                try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
                 Toast.makeText(this@MainActivity, "Gagal mengambil foto: ${exception.message}", Toast.LENGTH_LONG).show()
             }
         })
