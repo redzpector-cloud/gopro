@@ -817,7 +817,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val tv = textView(label, 12f, true).apply { gravity=Gravity.START or Gravity.CENTER_VERTICAL }
         row.addView(tv, LinearLayout.LayoutParams(0,dp(50),1f))
         val sw = Switch(this).apply { isChecked=checked; text=if(checked) "TAMPIL" else "HIDE"; textSize=9f; setTextColor(Color.WHITE) }
-        sw.setOnCheckedChangeListener { _: CompoundButton, checkedNow: Boolean -> text=if(checkedNow) "TAMPIL" else "HIDE"; setHudVisible(key, checkedNow) }
+        sw.setOnCheckedChangeListener { _: CompoundButton, checkedNow: Boolean -> sw.text=if(checkedNow) "TAMPIL" else "HIDE"; setHudVisible(key, checkedNow) }
         row.addView(sw, LinearLayout.LayoutParams(dp(105),dp(50)))
         parent.addView(row, LinearLayout.LayoutParams(-1,dp(54)).apply { bottomMargin=dp(6) })
     }
