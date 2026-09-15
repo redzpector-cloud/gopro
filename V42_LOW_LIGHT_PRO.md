@@ -1,4 +1,4 @@
-# JejakCam V49 — Low Light Pro
+# JejakCam V50 — Low Light Pro
 
 Fokus: kualitas video di bengkel atau kondisi malam dengan cahaya rendah.
 
@@ -10,7 +10,7 @@ Target:
 - 4K/30 tetap menjadi target bila perangkat mampu; fallback ke mode kompatibel bila tidak.
 - AE/AF Lock V37 tetap kompatibel.
 - HDR V39 dan Video Quality Pro V40 tetap kompatibel.
-- Stabilization Pro V49 tetap aktif sesuai kemampuan kamera.
+- Stabilization Pro V50 tetap aktif sesuai kemampuan kamera.
 - Jika kontrol manual tidak didukung perangkat, gunakan Auto Exposure yang aman.
 - Tidak crash pada perangkat dengan capability kamera berbeda.
 

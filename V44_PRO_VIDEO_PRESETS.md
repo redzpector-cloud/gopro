@@ -1,4 +1,4 @@
-# JejakCam V49 — Pro Video Presets
+# JejakCam V50 — Pro Video Presets
 
 Preset cepat untuk kualitas video tanpa harus mengatur banyak parameter.
 

@@ -1,4 +1,4 @@
-# JejakCam V49 — Video Detail & Sharpness
+# JejakCam V50 — Video Detail & Sharpness
 
 Fokus:
 - SHARPNESS AUTO / LOW / MEDIUM / HIGH.
@@ -8,7 +8,7 @@ Fokus:
 - Saat LOW LIGHT aktif, sharpening otomatis lebih lembut.
 - Pengaturan tidak boleh mengubah resolusi/FPS secara mendadak saat REC.
 - Jika hardware/software processing tidak mendukung sharpening, fallback ke output kamera normal tanpa crash.
-- V40 Video Quality Pro, V41 Stabilization Pro, V42 Low Light Pro, V43 Audio Pro, V44 Presets, V45 Smart Tuning dan V49 Thermal Guard tetap dipertahankan.
+- V40 Video Quality Pro, V41 Stabilization Pro, V42 Low Light Pro, V43 Audio Pro, V44 Presets, V45 Smart Tuning dan V50 Thermal Guard tetap dipertahankan.
 
 Target:
 1. Detail komponen dan tulisan lebih jelas.

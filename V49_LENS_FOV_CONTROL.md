@@ -1,4 +1,4 @@
-# JejakCam V49 — Lens & FOV Control
+# JejakCam V50 — Lens & FOV Control
 
 Fokus: pilihan sudut pandang seperti action camera tanpa memaksa kemampuan kamera HP.
 
