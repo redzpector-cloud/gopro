@@ -140,6 +140,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var selectedQuality = Quality.FHD
     private var selectedQualityLabel = "1080P"
     private var cameraActive = false
+    // V56: remembers that the user intentionally opened the camera so it can be restored after background/foreground.
+    private var cameraRequested = false
+    private var backgroundCameraRelease = false
     private var requestedPhotoMode = false
     // V54: invalidates queued CameraX callbacks when the camera is closed/reconfigured.
     private var cameraStartToken = 0L
@@ -889,6 +892,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         photoMode = photo
         requestedPhotoMode = photo
+        cameraRequested = true
         if (cameraActive) {
             setPhotoMode(photo)
             return
@@ -1331,7 +1335,25 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         })
     }
 
+    // V56: release CameraX when the Activity truly goes to the background, but keep
+    // the user's intent so onResume() can reopen it automatically. This avoids stale
+    // camera bindings after screen-off/app-switch while preserving the home UI state.
+    private fun releaseCameraForBackground() {
+        if (!cameraActive || recording != null) return
+        cameraStartToken++
+        cameraRebindInProgress = false
+        pendingZoomPreset = null
+        try { ProcessCameraProvider.getInstance(this).get().unbindAll() } catch (_: Exception) {}
+        camera = null
+        recorder = null
+        imageCapture = null
+        cameraActive = false
+        backgroundCameraRelease = true
+    }
+
     private fun closeCamera() {
+        cameraRequested = false
+        backgroundCameraRelease = false
         cameraStartToken++
         cameraRebindInProgress = false
         pendingZoomPreset = null
@@ -1621,12 +1643,30 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         super.onResume()
         rotationSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
         gyroSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+
+        // V56: restore the camera only when the user had previously opened it.
+        if (cameraRequested && !cameraActive && backgroundCameraRelease &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            backgroundCameraRelease = false
+            startCamera(!photoMode && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+        }
     }
 
     override fun onPause() {
         sensorManager.unregisterListener(this)
         if (gpsEnabled) stopGpsUpdates()
         super.onPause()
+    }
+
+    override fun onStop() {
+        // Do not tear down an active recording. CameraX can finish the recording
+        // lifecycle without us destroying its use cases here. For an idle camera,
+        // release the binding so Android can safely reclaim the camera while the app
+        // is in the background.
+        if (!isChangingConfigurations && !isFinishing && recording == null) {
+            releaseCameraForBackground()
+        }
+        super.onStop()
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -1676,6 +1716,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     override fun onDestroy() {
+        cameraRequested = false
+        backgroundCameraRelease = false
         cameraStartToken++
         storageHandler.removeCallbacksAndMessages(null)
         timerHandler.removeCallbacksAndMessages(null)
