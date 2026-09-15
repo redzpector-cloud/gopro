@@ -18,6 +18,9 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ScrollView
+import android.widget.Switch
+import android.widget.CompoundButton
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -138,6 +141,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var selectedQualityLabel = "1080P"
     private var cameraActive = false
     private var requestedPhotoMode = false
+
+    // V53: separate function state (AUTO/ON/OFF) from HUD visibility (SHOW/HIDE).
+    private val prefs by lazy { getSharedPreferences("jejakcam_settings", MODE_PRIVATE) }
+    private val hudViews = mutableMapOf<String, View>()
+    private var settingsOverlay: View? = null
+    private var stabilizerMode = "AUTO"
+    private var horizonMode = "ON"
+    private var micMode = "ON"
+    private var gpsMode = "OFF"
+    private var loopMode = "ON"
     private val timerHandler = Handler(Looper.getMainLooper())
     private val storageHandler = Handler(Looper.getMainLooper())
     private val storageRunnable = object : Runnable {
@@ -228,6 +241,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 return true
             }
         })
+        loadSettings()
         buildUi()
         updateGpsStatus()
         storageHandler.post(storageRunnable)
@@ -328,7 +342,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "V52: AE/AF LOCK • TAP FOCUS • 4K/1080P • EIS • GYRO • HORIZON • MIC • LOOP", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { showSettings() }
         }
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
@@ -356,9 +370,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         hud.addView(resolution, FrameLayout.LayoutParams(dp(108), dp(38), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(14) })
+        hudViews["resolution"] = resolution
 
         batteryText = textView("●  --%", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(9),0,dp(9),0) }
         hud.addView(batteryText, FrameLayout.LayoutParams(dp(76), dp(38), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(14) })
+        hudViews["battery"] = batteryText
 
         storageText = textView("STOR --", 9f, true).apply {
             background = getDrawable(R.drawable.bg_chip)
@@ -368,6 +384,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         hud.addView(storageText, FrameLayout.LayoutParams(dp(112), dp(30), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(106) })
+        hudViews["storage"] = storageText
 
         gpsText = textView("GPS OFF", 10f, true).apply {
             background = getDrawable(R.drawable.bg_toggle)
@@ -375,53 +392,60 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setOnClickListener { toggleGps() }
         }
         hud.addView(gpsText, FrameLayout.LayoutParams(dp(104), dp(34), Gravity.TOP or Gravity.START).apply { leftMargin=dp(14); topMargin=dp(106) })
+        hudViews["gps"] = gpsText
 
         compassText = textView("N 000°", 10f, true).apply {
             background = getDrawable(R.drawable.bg_chip)
             setPadding(dp(8), 0, dp(8), 0)
         }
         hud.addView(compassText, FrameLayout.LayoutParams(dp(104), dp(34), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(106) })
+        hudViews["compass"] = compassText
 
         gpsStatsText = textView("MAX 0 • AVG 0 • 0.0 km", 9f, true).apply {
             background = getDrawable(R.drawable.bg_chip)
             setPadding(dp(8), 0, dp(8), 0)
         }
         hud.addView(gpsStatsText, FrameLayout.LayoutParams(dp(230), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(132) })
+        hudViews["gpsStats"] = gpsStatsText
 
         val quickSettings = textView("⚙", 20f, true).apply {
             background = getDrawable(R.drawable.bg_control)
-            setOnClickListener {
-                val info = if (photoMode) "FOTO • 1.0x • EV $exposureIndex"
-                else "VIDEO • $selectedQualityLabel • FPS AUTO • EIS • ${if (horizonLockOn) "HORIZON ON" else "HORIZON OFF"}"
-                Toast.makeText(this@MainActivity, info, Toast.LENGTH_SHORT).show()
-            }
+            setOnClickListener { showSettings() }
         }
         hud.addView(quickSettings, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(62) })
+        hudViews["quickSettings"] = quickSettings
 
         statusText = textView("READY", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0) }
         hud.addView(statusText, FrameLayout.LayoutParams(dp(96), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(62) })
+        hudViews["status"] = statusText
         timerText = textView("00:00", 15f, true)
         hud.addView(timerText, FrameLayout.LayoutParams(dp(100), dp(38), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(94) })
+        hudViews["timer"] = timerText
         loopText = textView("SEG 01", 9f, true).apply { alpha = .72f }
         hud.addView(loopText, FrameLayout.LayoutParams(dp(170), dp(26), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(122) })
+        hudViews["loopText"] = loopText
 
         horizonText = textView("— LEVEL • SMOOTH —", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.88f }
         hud.addView(horizonText, FrameLayout.LayoutParams(dp(142), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(152) })
+        hudViews["horizon"] = horizonText
 
         tiltText = textView("ROLL 0°  •  PITCH 0°", 10f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.78f }
         hud.addView(tiltText, FrameLayout.LayoutParams(dp(150), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(190) })
+        hudViews["tilt"] = tiltText
 
         val horizonToggle = textView("HORIZON ON", 11f, true).apply {
             background=getDrawable(R.drawable.bg_toggle)
-            setOnClickListener { horizonLockOn=!horizonLockOn; text=if(horizonLockOn) "HORIZON ON" else "HORIZON OFF" }
+            setOnClickListener { horizonLockOn=!horizonLockOn; horizonMode=if(horizonLockOn) "ON" else "OFF"; saveMode("horizonMode", horizonMode); text=if(horizonLockOn) "HORIZON ON" else "HORIZON OFF" }
         }
         hud.addView(horizonToggle, FrameLayout.LayoutParams(dp(112), dp(36), Gravity.TOP or Gravity.START).apply { leftMargin=dp(14); topMargin=dp(64) })
+        hudViews["horizonToggle"] = horizonToggle
 
         stabilizationText = textView("STAB  AUTO", 11f, true).apply {
             background=getDrawable(R.drawable.bg_toggle)
             setOnClickListener { Toast.makeText(this@MainActivity,"EIS mengikuti kemampuan kamera HP",Toast.LENGTH_SHORT).show() }
         }
         hud.addView(stabilizationText, FrameLayout.LayoutParams(dp(112), dp(36), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(64) })
+        hudViews["stabilization"] = stabilizationText
 
         val zoomPanel = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; gravity=Gravity.CENTER; background=getDrawable(R.drawable.bg_control); setPadding(dp(4),dp(4),dp(4),dp(4)) }
         val plus=Button(this).apply { text="+"; textSize=20f; setTextColor(Color.WHITE); background=getDrawable(R.drawable.bg_zoom); setOnClickListener{setZoom(.5f)} }
@@ -431,6 +455,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         zoomPanel.addView(zoomText,LinearLayout.LayoutParams(dp(46),dp(28)))
         zoomPanel.addView(minus,LinearLayout.LayoutParams(dp(46),dp(46)))
         hud.addView(zoomPanel,FrameLayout.LayoutParams(dp(58),dp(130),Gravity.END or Gravity.CENTER_VERTICAL).apply{rightMargin=dp(12)})
+        hudViews["zoom"] = zoomPanel
 
         val exposurePanel=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER;background=getDrawable(R.drawable.bg_control)}
         val em=Button(this).apply{text="−";textSize=18f;setTextColor(Color.WHITE);background=getDrawable(R.drawable.bg_zoom);setOnClickListener{changeExposure(-1)}}
@@ -438,6 +463,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val ep=Button(this).apply{text="+";textSize=18f;setTextColor(Color.WHITE);background=getDrawable(R.drawable.bg_zoom);setOnClickListener{changeExposure(1)}}
         exposurePanel.addView(em,LinearLayout.LayoutParams(dp(42),dp(42))); exposurePanel.addView(exposureText,LinearLayout.LayoutParams(dp(48),dp(42))); exposurePanel.addView(ep,LinearLayout.LayoutParams(dp(42),dp(42)))
         hud.addView(exposurePanel,FrameLayout.LayoutParams(dp(136),dp(46),Gravity.START or Gravity.CENTER_VERTICAL).apply{leftMargin=dp(12)})
+        hudViews["exposure"] = exposurePanel
 
         val aeAfLock = textView("AE/AF",10f,true).apply {
             background = getDrawable(R.drawable.bg_control)
@@ -473,6 +499,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         hud.addView(aeAfLock, FrameLayout.LayoutParams(dp(92),dp(40),Gravity.START or Gravity.CENTER_VERTICAL).apply{leftMargin=dp(154)})
+        hudViews["aeaf"] = aeAfLock
 
         val bottomShade=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL;setPadding(dp(18),dp(10),dp(18),dp(10));background=getDrawable(R.drawable.bg_bottom)}
         val modeRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
@@ -512,6 +539,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         lensRow.addView(lensButton("2×",2f),LinearLayout.LayoutParams(dp(62),dp(34)).apply{rightMargin=dp(4)})
         lensRow.addView(lensButton("4×",4f),LinearLayout.LayoutParams(dp(62),dp(34)))
         bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(38)))
+        hudViews["lensRow"] = lensRow
 
         val quickRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         val quick=textView("QUICK REC",10f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{toggleRecording()}}
@@ -545,6 +573,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             loopDurationLabel = "OFF"
                         }
                     }
+                    loopMode = if (loopRecordingOn) "ON" else "OFF"
+                    saveMode("loopMode", loopMode)
                     text = if (loopRecordingOn) "LOOP $loopDurationLabel" else "LOOP OFF"
                     loopText.text = if (loopRecordingOn) "LOOP $loopDurationLabel • SEG 01" else "SEG 01"
                     statusText.text = if (loopRecordingOn) "LOOP $loopDurationLabel • SIAP" else "LOOP OFF • SIAP"
@@ -559,6 +589,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 } else {
                     audioEnabled=!audioEnabled
                     audioEnhancementOn=audioEnabled
+                    micMode=if(audioEnabled) "ON" else "OFF"
+                    saveMode("micMode", micMode)
                     text=if(audioEnabled)"MIC ON" else "MIC OFF"
                     Toast.makeText(this@MainActivity, if(audioEnabled) "Mic aktif • audio akan direkam" else "Mic mati • video tanpa audio", Toast.LENGTH_SHORT).show()
                 }
@@ -566,6 +598,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         quickRow.addView(quick,LinearLayout.LayoutParams(dp(88),dp(38)).apply{rightMargin=dp(5)});quickRow.addView(loop,LinearLayout.LayoutParams(dp(76),dp(38)).apply{leftMargin=dp(5);rightMargin=dp(5)});quickRow.addView(mic,LinearLayout.LayoutParams(dp(76),dp(38)).apply{leftMargin=dp(5)})
         bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(40)))
+        hudViews["quickRow"] = quickRow
 
         val actionRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         val countdownBtn=textView("TIMER OFF",10f,true).apply{
@@ -587,7 +620,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         actionRow.addView(countdownBtn,LinearLayout.LayoutParams(dp(92),dp(36)).apply{rightMargin=dp(5)})
         actionRow.addView(pauseButton,LinearLayout.LayoutParams(dp(82),dp(36)).apply{leftMargin=dp(5)})
         bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(38)))
+        hudViews["actionRow"] = actionRow
         hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(232),Gravity.BOTTOM))
+        hudViews["bottomControls"] = bottomShade
 
         root.addView(hud,FrameLayout.LayoutParams(-1,-1))
         setContentView(root)
@@ -639,12 +674,179 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
 
+        applyHudPreferences()
         // Keep the camera screen hidden until the user explicitly opens the camera.
         cameraScreen = hud
     }
 
     private lateinit var cameraScreen: View
     private lateinit var homeScreen: View
+
+
+    private fun loadSettings() {
+        stabilizerMode = prefs.getString("stabilizerMode", "AUTO") ?: "AUTO"
+        horizonMode = prefs.getString("horizonMode", "ON") ?: "ON"
+        micMode = prefs.getString("micMode", "ON") ?: "ON"
+        gpsMode = prefs.getString("gpsMode", "OFF") ?: "OFF"
+        loopMode = prefs.getString("loopMode", "ON") ?: "ON"
+        stabilizationOn = stabilizerMode != "OFF"
+        horizonLockOn = horizonMode != "OFF"
+        audioEnabled = micMode != "OFF"
+        audioEnhancementOn = audioEnabled
+        loopRecordingOn = loopMode != "OFF"
+    }
+
+    private fun saveMode(key: String, value: String) {
+        prefs.edit().putString(key, value).apply()
+    }
+
+    private fun hudVisible(key: String, defaultValue: Boolean = true): Boolean =
+        prefs.getBoolean("show_$key", defaultValue)
+
+    private fun setHudVisible(key: String, visible: Boolean) {
+        prefs.edit().putBoolean("show_$key", visible).apply()
+        hudViews[key]?.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    private fun applyHudPreferences() {
+        if (hudViews.isEmpty()) return
+        val defaults = mapOf(
+            "resolution" to true, "battery" to true, "storage" to false,
+            "gps" to false, "compass" to false, "gpsStats" to false,
+            "quickSettings" to true, "status" to true, "timer" to true,
+            "loopText" to false, "horizon" to false, "tilt" to false,
+            "horizonToggle" to false, "stabilization" to false,
+            "zoom" to true, "exposure" to false, "aeaf" to true,
+            "lensRow" to true, "quickRow" to false, "actionRow" to false
+        )
+        defaults.forEach { (key, def) -> hudViews[key]?.visibility = if (hudVisible(key, def)) View.VISIBLE else View.GONE }
+    }
+
+    private fun showSettings() {
+        if (settingsOverlay != null) return
+        val root = window.decorView.findViewById<FrameLayout>(android.R.id.content) ?: return
+        val overlay = FrameLayout(this).apply { setBackgroundColor(0xFF05080C.toInt()) }
+        val scroll = ScrollView(this)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(28))
+        }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val title = textView("PENGATURAN", 22f, true).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
+        header.addView(title, LinearLayout.LayoutParams(0, dp(54), 1f))
+        val close = textView("✕", 22f, true).apply {
+            background = getDrawable(R.drawable.bg_control)
+            setOnClickListener { hideSettings() }
+        }
+        header.addView(close, LinearLayout.LayoutParams(dp(52), dp(52)))
+        content.addView(header)
+        val hint = textView("Atur fungsi dan tampilan secara terpisah. HIDE hanya menyembunyikan indikator; fitur tetap bekerja.", 11f).apply { alpha = .7f; gravity = Gravity.START; setPadding(0,0,0,dp(14)) }
+        content.addView(hint, LinearLayout.LayoutParams(-1, dp(58)))
+
+        addSettingsSection(content, "FITUR KAMERA")
+        addModeSetting(content, "Stabilizer", "stabilizerMode", stabilizerMode, listOf("AUTO", "ON", "OFF")) { v -> stabilizerMode=v; stabilizationOn=v!="OFF"; saveMode("stabilizerMode",v); updateStabilizationHud() }
+        addModeSetting(content, "Horizon / Level", "horizonMode", horizonMode, listOf("AUTO", "ON", "OFF")) { v -> horizonMode=v; horizonLockOn=v!="OFF"; saveMode("horizonMode",v); updateHorizonHud() }
+        addModeSetting(content, "Mic / Audio", "micMode", micMode, listOf("AUTO", "ON", "OFF")) { v -> micMode=v; audioEnabled=v!="OFF"; audioEnhancementOn=audioEnabled; saveMode("micMode",v); updateAudioUi() }
+        addModeSetting(content, "GPS / Lokasi", "gpsMode", gpsMode, listOf("AUTO", "ON", "OFF")) { v -> gpsMode=v; saveMode("gpsMode",v); if(v=="OFF") stopGpsUpdates() else if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED) startGpsUpdates() else locationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
+        addModeSetting(content, "Loop Recording", "loopMode", loopMode, listOf("AUTO", "ON", "OFF")) { v -> loopMode=v; loopRecordingOn=v!="OFF"; saveMode("loopMode",v) }
+
+        addSettingsSection(content, "INDIKATOR DI LAYAR KAMERA")
+        val labels = linkedMapOf(
+            "resolution" to "Resolusi & FPS",
+            "battery" to "Baterai",
+            "storage" to "Penyimpanan",
+            "gps" to "GPS / Kecepatan",
+            "compass" to "Kompas",
+            "gpsStats" to "Statistik GPS",
+            "status" to "Status Rekaman",
+            "timer" to "Timer",
+            "loopText" to "Loop / Segmen",
+            "horizon" to "Garis Horizon",
+            "tilt" to "Roll / Pitch",
+            "stabilization" to "Status Stabilizer",
+            "exposure" to "EV / Exposure",
+            "aeaf" to "AE/AF",
+            "quickSettings" to "Tombol Pengaturan",
+            "zoom" to "Kontrol Zoom",
+            "lensRow" to "Preset Lensa",
+            "quickRow" to "Quick Rec / Loop / Mic",
+            "actionRow" to "Timer / Pause"
+        )
+        labels.forEach { (key,label) -> addVisibilitySetting(content, key, label, hudViews[key]?.visibility == View.VISIBLE) }
+
+        addSettingsSection(content, "PRESET")
+        val presetRow = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER }
+        listOf("SIMPLE", "TEKNISI", "LENGKAP").forEach { preset ->
+            val b = Button(this).apply {
+                text = preset; textSize=10f; setTextColor(Color.WHITE); background=getDrawable(R.drawable.bg_control)
+                setOnClickListener { applyPreset(preset); hideSettings(); Toast.makeText(this@MainActivity, "Preset $preset diterapkan", Toast.LENGTH_SHORT).show() }
+            }
+            presetRow.addView(b, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin=dp(3); rightMargin=dp(3) })
+        }
+        content.addView(presetRow, LinearLayout.LayoutParams(-1, dp(50)))
+        val reset = Button(this).apply {
+            text="RESET KE DEFAULT"; textSize=11f; setTextColor(Color.WHITE); background=getDrawable(R.drawable.bg_control)
+            setOnClickListener { prefs.edit().clear().apply(); loadSettings(); applyHudPreferences(); hideSettings(); Toast.makeText(this@MainActivity,"Pengaturan dikembalikan ke default",Toast.LENGTH_SHORT).show() }
+        }
+        content.addView(reset, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin=dp(12) })
+        scroll.addView(content)
+        overlay.addView(scroll, FrameLayout.LayoutParams(-1,-1))
+        root.addView(overlay, FrameLayout.LayoutParams(-1,-1))
+        settingsOverlay = overlay
+    }
+
+    private fun addSettingsSection(parent: LinearLayout, title: String) {
+        val t = textView(title, 12f, true).apply { setTextColor(0xFFFFD21F.toInt()); gravity=Gravity.START; setPadding(dp(2),dp(12),0,dp(7)) }
+        parent.addView(t, LinearLayout.LayoutParams(-1, dp(40)))
+    }
+
+    private fun addModeSetting(parent: LinearLayout, label: String, key: String, current: String, modes: List<String>, onChanged: (String)->Unit) {
+        val row = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; background=getDrawable(R.drawable.bg_control); setPadding(dp(14),0,dp(8),0) }
+        val tv = textView(label, 12f, true).apply { gravity=Gravity.START or Gravity.CENTER_VERTICAL }
+        row.addView(tv, LinearLayout.LayoutParams(0,dp(50),1f))
+        val b = Button(this).apply {
+            text=current; textSize=10f; setTextColor(Color.WHITE); background=getDrawable(R.drawable.bg_toggle)
+            setOnClickListener { val next = modes[(modes.indexOf(text.toString()).coerceAtLeast(0)+1)%modes.size]; text=next; onChanged(next) }
+        }
+        row.addView(b, LinearLayout.LayoutParams(dp(92),dp(42)))
+        parent.addView(row, LinearLayout.LayoutParams(-1,dp(54)).apply { bottomMargin=dp(6) })
+    }
+
+    private fun addVisibilitySetting(parent: LinearLayout, key: String, label: String, checked: Boolean) {
+        val row = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; background=getDrawable(R.drawable.bg_control); setPadding(dp(14),0,dp(8),0) }
+        val tv = textView(label, 12f, true).apply { gravity=Gravity.START or Gravity.CENTER_VERTICAL }
+        row.addView(tv, LinearLayout.LayoutParams(0,dp(50),1f))
+        val sw = Switch(this).apply { isChecked=checked; text=if(checked) "TAMPIL" else "HIDE"; textSize=9f; setTextColor(Color.WHITE) }
+        sw.setOnCheckedChangeListener { _: CompoundButton, checkedNow: Boolean -> text=if(checkedNow) "TAMPIL" else "HIDE"; setHudVisible(key, checkedNow) }
+        row.addView(sw, LinearLayout.LayoutParams(dp(105),dp(50)))
+        parent.addView(row, LinearLayout.LayoutParams(-1,dp(54)).apply { bottomMargin=dp(6) })
+    }
+
+    private fun applyPreset(name: String) {
+        val allKeys = listOf("resolution","battery","storage","gps","compass","gpsStats","quickSettings","status","timer","loopText","horizon","tilt","horizonToggle","stabilization","zoom","exposure","aeaf","lensRow","quickRow","actionRow")
+        allKeys.forEach { setHudVisible(it, false) }
+        val visible = when(name) {
+            "SIMPLE" -> listOf("resolution","battery","quickSettings","status","timer","zoom","aeaf","lensRow")
+            "LENGKAP" -> allKeys
+            else -> listOf("resolution","battery","quickSettings","status","timer","zoom","aeaf","lensRow")
+        }
+        visible.forEach { setHudVisible(it, true) }
+    }
+
+    private fun hideSettings() {
+        settingsOverlay?.let { (it.parent as? android.view.ViewGroup)?.removeView(it) }
+        settingsOverlay = null
+    }
+
+    private fun updateStabilizationHud() {
+        if (::stabilizationText.isInitialized) stabilizationText.text = "STAB  $stabilizerMode"
+    }
+
+    private fun updateHorizonHud() {
+        if (::horizonText.isInitialized) horizonText.visibility = if (hudVisible("horizon", false)) View.VISIBLE else View.GONE
+    }
+
+    private fun updateAudioUi() { }
 
     private fun supportsVideoStabilization(cameraInfo: CameraInfo): Boolean {
         return try {
@@ -749,11 +951,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 )
                 .setCaptureRequestOption(
                     CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
-                    CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON
+                    if (stabilizationOn) CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON
+                    else CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF
                 )
             val videoCapture = try {
                 videoBuilder
-                    .setVideoStabilizationEnabled(true)
+                    .setVideoStabilizationEnabled(stabilizationOn)
                     .build()
             } catch (_: Exception) {
                 // Fall back to normal recording if this phone's camera HAL does not
@@ -788,8 +991,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 aeAfLockOn = false
                 camera?.cameraControl?.setExposureCompensationIndex(0)
                 exposureText.text = "EV 0"
-                statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
-                stabilizationText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) "STAB  HW" else "STAB  AUTO"
+                statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener) && stabilizationOn) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
+                stabilizationText.text = if (!stabilizationOn) "STAB  OFF" else if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) "STAB  HW" else "STAB  AUTO"
             } catch (e: Exception) {
                 // If preview stabilization causes a device-specific HAL error, retry
                 // once without preview stabilization but keep recording stabilization.
@@ -823,8 +1026,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     exposureIndex = 0
                     camera?.cameraControl?.setExposureCompensationIndex(0)
                     exposureText.text = "EV 0"
-                    statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
-                stabilizationText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) "STAB  HW" else "STAB  AUTO"
+                    statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener) && stabilizationOn) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
+                stabilizationText.text = if (!stabilizationOn) "STAB  OFF" else if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) "STAB  HW" else "STAB  AUTO"
                 } catch (fallbackError: Exception) {
                     Toast.makeText(this, "Kamera gagal dibuka: ${fallbackError.message}", Toast.LENGTH_LONG).show()
                 }
