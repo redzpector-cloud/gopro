@@ -1368,6 +1368,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 is VideoRecordEvent.Finalize -> {
                     timerHandler.removeCallbacksAndMessages("LOOP_STOP")
                     if (event.hasError()) {
+                        // V69: if MediaStore created an output item but finalization failed,
+                        // remove that failed item so the Gallery does not retain a broken video.
+                        try {
+                            val failedUri = event.outputResults.outputUri
+                            if (failedUri != Uri.EMPTY) {
+                                contentResolver.delete(failedUri, null, null)
+                            }
+                        } catch (_: Exception) { }
                         Toast.makeText(this, "Gagal menyimpan video: ${event.error}", Toast.LENGTH_LONG).show()
                         recording = null
                         recordingFinalizing = false
