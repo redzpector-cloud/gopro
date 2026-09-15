@@ -1454,6 +1454,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Toast.makeText(this, if (enabled) "Mode FOTO" else "Mode VIDEO", Toast.LENGTH_SHORT).show()
     }
 
+    // V71: photo preflight guard. Keep a small safety margin so the JPEG can
+    // finish writing and MediaStore can publish it cleanly.
+    private fun hasSafePhotoStorage(): Boolean {
+        val (free, total) = storageInfo()
+        if (free <= 0L || total <= 0L) return true
+        val freePct = free.toDouble() / total.toDouble() * 100.0
+        return free > 32L * 1024L * 1024L && freePct > 0.5
+    }
+
     private fun capturePhoto() {
         if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
         if (photoCaptureInProgress) {
@@ -1461,6 +1470,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             return
         }
         val capture = imageCapture ?: return
+        if (!hasSafePhotoStorage()) {
+            statusText.text = "STORAGE LOW"
+            Toast.makeText(this, "Penyimpanan terlalu penuh • kosongkan ruang sebelum mengambil foto", Toast.LENGTH_LONG).show()
+            return
+        }
         photoCaptureInProgress = true
         val name = String.format("JejakCam_%tY%<tm%<td_%<tH%<tM%<tS_%<L.jpg", java.util.Date())
         // V66: create the MediaStore row first so a failed/aborted capture can be
