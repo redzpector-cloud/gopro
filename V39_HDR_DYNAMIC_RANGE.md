@@ -1,4 +1,4 @@
-# JejakCam V41 — HDR / Dynamic Range
+# JejakCam V42 — HDR / Dynamic Range
 
 Tujuan:
 - Mode HDR / Dynamic Range untuk adegan dengan jendela/lampu terang dan area bengkel gelap.
@@ -7,7 +7,7 @@ Tujuan:
 - Jangan memaksa HDR jika capability kamera tidak tersedia.
 - Jika HDR tidak didukung, fallback ke normal Auto Exposure tanpa crash.
 - AE/AF Lock V37 tetap kompatibel.
-- Low Light/Night V41 tetap tersedia.
+- Low Light/Night V42 tetap tersedia.
 - Loop Recording, Quick REC, Smart Storage, EIS/Horizon/Gyro dan GPS tetap dipertahankan.
 
 Prioritas:
