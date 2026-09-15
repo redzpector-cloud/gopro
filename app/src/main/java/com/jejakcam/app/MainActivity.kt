@@ -916,13 +916,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     CaptureRequest.CONTROL_AE_MODE,
                     CameraMetadata.CONTROL_AE_MODE_ON
                 )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                try {
-                    previewBuilder.setPreviewStabilizationEnabled(true)
-                } catch (_: Exception) {
-                    // Some HALs expose video stabilization but reject preview stabilization.
-                }
-            }
+            // Do not call Preview.Builder#setPreviewStabilizationEnabled here.
+            // CameraX Preview.Builder does not expose that API on the versions used
+            // by this project. Stabilization is applied to VideoCapture below, with
+            // a safe fallback when the device HAL does not support it.
             val preview = previewBuilder.build().also {
                 it.surfaceProvider = previewView.surfaceProvider
             }

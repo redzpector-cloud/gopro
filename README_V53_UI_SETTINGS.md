@@ -7,3 +7,9 @@
 - Tersedia preset SIMPLE, TEKNISI, LENGKAP dan RESET KE DEFAULT.
 - Pengaturan tampilan disimpan di SharedPreferences.
 - Stabilizer video mengikuti status ON/OFF yang dipilih.
+
+
+## V53.1 build fix
+
+V53.1 removes the unsupported `Preview.Builder#setPreviewStabilizationEnabled` call.
+CameraX stabilization remains configured on the `VideoCapture` use case with a safe fallback.
