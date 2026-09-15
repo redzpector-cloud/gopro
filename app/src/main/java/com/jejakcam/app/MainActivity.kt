@@ -370,7 +370,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V58  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V59  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -1230,6 +1230,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             pending.withAudioEnabled()
         } else pending
         recording = prepared.start(ContextCompat.getMainExecutor(this)) { event ->
+            // V59: ignore late CameraX callbacks after Activity teardown.
+            if (activityStopping || isFinishing || isDestroyed) {
+                if (event is VideoRecordEvent.Finalize) {
+                    recording = null
+                    stoppingForLoop = false
+                    stopRequestedByUser = false
+                }
+                return@start
+            }
             when (event) {
                 is VideoRecordEvent.Start -> {
                     recordingStartedAt = System.currentTimeMillis()
@@ -1751,8 +1760,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         cameraStartToken++
         storageHandler.removeCallbacksAndMessages(null)
         timerHandler.removeCallbacksAndMessages(null)
-        recording?.stop()
-        timerHandler.removeCallbacksAndMessages(null)
+        countdownActive = false
+        stoppingForLoop = false
+        stopRequestedByUser = true
+        val activeRecording = recording
+        recording = null
+        activeRecording?.stop()
         sensorManager.unregisterListener(this)
         stopGpsUpdates()
         batteryReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
