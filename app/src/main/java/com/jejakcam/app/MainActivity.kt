@@ -143,6 +143,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var requestedPhotoMode = false
     // V54: invalidates queued CameraX callbacks when the camera is closed/reconfigured.
     private var cameraStartToken = 0L
+    // V55: remembers a lens/zoom request while CameraX is rebinding.
+    private var pendingZoomPreset: Float? = null
+    private var cameraRebindInProgress = false
 
     // V53: separate function state (AUTO/ON/OFF) from HUD visibility (SHOW/HIDE).
     private val prefs by lazy { getSharedPreferences("jejakcam_settings", MODE_PRIVATE) }
@@ -903,10 +906,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun startCamera(withAudio: Boolean) {
         val startToken = ++cameraStartToken
+        cameraRebindInProgress = true
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             if (startToken != cameraStartToken || isFinishing || isDestroyed) return@addListener
-            val provider = future.get()
+            val provider = try { future.get() } catch (e: Exception) {
+                cameraRebindInProgress = false
+                Toast.makeText(this, "CameraX gagal menyiapkan kamera: ${e.message}", Toast.LENGTH_LONG).show()
+                return@addListener
+            }
 
             // Action-camera tuning: continuous video AF + video stabilization.
             // CameraX 1.4+ provides hardware/device video stabilization when supported.
@@ -967,7 +975,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
             provider.unbindAll()
             try {
-                if (startToken != cameraStartToken || isFinishing || isDestroyed) return@addListener
+                if (startToken != cameraStartToken || isFinishing || isDestroyed) {
+                    cameraRebindInProgress = false
+                    return@addListener
+                }
                 camera = provider.bindToLifecycle(
                     this,
                     currentCameraSelector(),
@@ -976,6 +987,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     image
                 )
                 cameraActive = true
+                cameraRebindInProgress = false
                 previewView.visibility = View.VISIBLE
                 cameraScreen.visibility = View.VISIBLE
                 homeScreen.visibility = View.GONE
@@ -984,6 +996,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 recordButton.isEnabled = true
                 recordButton.alpha = 1f
                 setZoom(0f)
+                pendingZoomPreset?.let { preset ->
+                    pendingZoomPreset = null
+                    setZoomToPreset(preset)
+                }
                 exposureIndex = 0
                 aeAfLockOn = false
                 camera?.cameraControl?.setExposureCompensationIndex(0)
@@ -1013,6 +1029,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         image
                     )
                     cameraActive = true
+                    cameraRebindInProgress = false
                     previewView.visibility = View.VISIBLE
                     cameraScreen.visibility = View.VISIBLE
                     homeScreen.visibility = View.GONE
@@ -1027,6 +1044,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener) && stabilizationOn) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
                 stabilizationText.text = if (!stabilizationOn) "STAB  OFF" else if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) "STAB  HW" else "STAB  AUTO"
                 } catch (fallbackError: Exception) {
+                    cameraRebindInProgress = false
+                    cameraActive = false
+                    camera = null
+                    recorder = null
+                    imageCapture = null
                     Toast.makeText(this, "Kamera gagal dibuka: ${fallbackError.message}", Toast.LENGTH_LONG).show()
                 }
             }
@@ -1094,7 +1116,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun setLensPreset(ratio: Float) {
-        if (!cameraActive || camera == null) {
+        if ((!cameraActive || camera == null) && !cameraRebindInProgress) {
             Toast.makeText(this, "Pilih VIDEO atau FOTO terlebih dahulu", Toast.LENGTH_SHORT).show()
             return
         }
@@ -1103,7 +1125,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             return
         }
         if (ratio == 0.5f) {
-            if (!wideMode) toggleWideCamera() else setZoomToPreset(1f)
+            if (!wideMode) {
+                pendingZoomPreset = 1f
+                toggleWideCamera()
+            } else {
+                setZoomToPreset(1f)
+            }
         } else {
             if (wideMode) {
                 wideMode = false
@@ -1111,8 +1138,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 providerFuture.addListener({
                     try {
                         providerFuture.get().unbindAll()
+                        pendingZoomPreset = ratio
                         startCamera(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
-                        setZoomToPreset(ratio)
                     } catch (_: Exception) {
                         Toast.makeText(this, "Kamera utama tidak tersedia", Toast.LENGTH_SHORT).show()
                     }
@@ -1306,6 +1333,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun closeCamera() {
         cameraStartToken++
+        cameraRebindInProgress = false
+        pendingZoomPreset = null
         if (recording != null) {
             Toast.makeText(this, "Hentikan rekaman terlebih dahulu", Toast.LENGTH_SHORT).show()
             return
