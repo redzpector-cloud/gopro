@@ -951,15 +951,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     if (stabilizationOn) CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON
                     else CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF
                 )
-            val videoCapture = try {
-                videoBuilder
-                    .setVideoStabilizationEnabled(stabilizationOn)
-                    .build()
-            } catch (_: Exception) {
-                // Fall back to normal recording if this phone's camera HAL does not
-                // support CameraX video stabilization.
-                VideoCapture.withOutput(recorder!!)
-            }
+            // CameraX 1.4.1 does not expose setVideoStabilizationEnabled() on
+            // VideoCapture.Builder. The stabilization request above is applied
+            // through Camera2Interop instead, so build the use case directly.
+            val videoCapture = videoBuilder.build()
 
             val image = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
