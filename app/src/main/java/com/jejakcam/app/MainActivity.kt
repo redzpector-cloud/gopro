@@ -1208,25 +1208,32 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 return@addListener
             }
 
-            val videoCapture = try {
-                val qualitySelector = QualitySelector.from(
-                    selectedQuality,
-                    FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
-                )
-                recorder = Recorder.Builder()
-                    .setQualitySelector(qualitySelector)
-                    .build()
-                VideoCapture.withOutput(recorder!!)
-            } catch (_: Exception) {
+            // FOTO: jangan ikut bind VideoCapture. Beberapa HAL/vendor HP menolak
+            // kombinasi Preview + VideoCapture + ImageCapture dan capture foto gagal.
+            val videoCapture: VideoCapture<Recorder>? = if (!photoMode) {
                 try {
-                    recorder = Recorder.Builder().build()
+                    val qualitySelector = QualitySelector.from(
+                        selectedQuality,
+                        FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+                    )
+                    recorder = Recorder.Builder()
+                        .setQualitySelector(qualitySelector)
+                        .build()
                     VideoCapture.withOutput(recorder!!)
-                } catch (e: Exception) {
-                    cameraRebindInProgress = false
-                    recorder = null
-                    Toast.makeText(this, "Video tidak didukung HP ini: ${e.message}", Toast.LENGTH_LONG).show()
-                    return@addListener
+                } catch (_: Exception) {
+                    try {
+                        recorder = Recorder.Builder().build()
+                        VideoCapture.withOutput(recorder!!)
+                    } catch (e: Exception) {
+                        cameraRebindInProgress = false
+                        recorder = null
+                        Toast.makeText(this, "Video tidak didukung HP ini: ${e.message}", Toast.LENGTH_LONG).show()
+                        return@addListener
+                    }
                 }
+            } else {
+                recorder = null
+                null
             }
 
             val image = try {
@@ -1263,13 +1270,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     CameraSelector.DEFAULT_BACK_CAMERA
                 }
 
-                camera = provider.bindToLifecycle(
-                    this,
-                    selector,
-                    preview,
-                    videoCapture,
-                    image
-                )
+                camera = if (videoCapture != null) {
+                    provider.bindToLifecycle(
+                        this, selector, preview, videoCapture, image
+                    )
+                } else {
+                    provider.bindToLifecycle(
+                        this, selector, preview, image
+                    )
+                }
 
                 cameraActive = true
                 cameraRebindInProgress = false
@@ -1722,7 +1731,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         // Beberapa HAL/vendor dapat crash atau menghentikan Activity ketika output
         // MediaStore masih PENDING. CameraX sekarang menulis JPEG ke cache terlebih
         // dahulu; setelah capture benar-benar selesai, baru kita publish ke Galeri.
-        val tempFile = File.createTempFile("jejakcam_", ".jpg", cacheDir)
+        val tempFile = try {
+            File.createTempFile("jejakcam_", ".jpg", cacheDir)
+        } catch (e: Exception) {
+            photoCaptureInProgress = false
+            Toast.makeText(this, "Tidak bisa menyiapkan file foto: ${e.message}", Toast.LENGTH_LONG).show()
+            return
+        }
 
         val output = ImageCapture.OutputFileOptions.Builder(tempFile).build()
 
@@ -1908,12 +1923,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun toggleRecording() {
-        if (!cameraActive || recorder == null) {
+        if (!cameraActive) {
             Toast.makeText(this, "Tekan BUKA KAMERA terlebih dahulu", Toast.LENGTH_SHORT).show()
             return
         }
         if (photoMode) {
+            if (imageCapture == null) {
+                Toast.makeText(this, "Kamera foto belum siap", Toast.LENGTH_SHORT).show()
+                return
+            }
             capturePhoto()
+            return
+        }
+        if (recorder == null) {
+            Toast.makeText(this, "Kamera video belum siap", Toast.LENGTH_SHORT).show()
             return
         }
         if (countdownActive) {
