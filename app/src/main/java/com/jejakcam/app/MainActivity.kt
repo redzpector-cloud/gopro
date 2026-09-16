@@ -19,7 +19,7 @@ import android.view.ScaleGestureDetector
 import android.graphics.Color
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.media.ThumbnailUtils
+import android.media.MediaMetadataRetriever
 import android.provider.MediaStore.Images
 import android.widget.Button
 import android.widget.FrameLayout
@@ -828,7 +828,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(8), 0, dp(18))
         }
-        scroll.addView(list, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(list)
         page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         overlay.addView(page, FrameLayout.LayoutParams(-1, -1))
 
@@ -898,7 +898,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setBackgroundColor(0xFF222222.toInt())
             try {
                 val bmp = if (media.isVideo) {
-                    ThumbnailUtils.createVideoThumbnail(this@MainActivity, media.uri, android.util.Size(dp(112), dp(72)))
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(this@MainActivity, media.uri)
+                        retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    } finally {
+                        retriever.release()
+                    }
                 } else {
                     contentResolver.openInputStream(media.uri)?.use { BitmapFactory.decodeStream(it) }
                 }
