@@ -1068,9 +1068,24 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
 
                 provider.unbindAll()
+                // V63: pilih lensa hanya bila perangkat benar-benar mengekspos kamera
+                // wide yang kompatibel. Jika tidak, selalu fallback ke kamera belakang utama.
+                val requestedSelector = if (wideMode) currentCameraSelector() else CameraSelector.DEFAULT_BACK_CAMERA
+                val selector = try {
+                    if (wideMode && !provider.hasCamera(requestedSelector)) {
+                        wideMode = false
+                        CameraSelector.DEFAULT_BACK_CAMERA
+                    } else {
+                        requestedSelector
+                    }
+                } catch (_: Exception) {
+                    wideMode = false
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                }
+
                 camera = provider.bindToLifecycle(
                     this,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    selector,
                     preview,
                     videoCapture,
                     image
@@ -1154,20 +1169,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             return
         }
         wideMode = !wideMode
+        val previousWide = wideMode
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener({
-            val provider = providerFuture.get()
             try {
-                provider.unbindAll()
-                // Rebuild through startCamera so the same AF/stabilization settings apply.
+                providerFuture.get().unbindAll()
+                // Rebuild through startCamera; startCamera itself verifies the selector
+                // and falls back to the normal rear camera when needed.
                 startCamera(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
                 Toast.makeText(
                     this,
                     if (wideMode) "WIDE / ULTRA-WIDE aktif" else "KAMERA UTAMA aktif",
                     Toast.LENGTH_SHORT
                 ).show()
-            } catch (e: Exception) {
-                wideMode = !wideMode
+            } catch (_: Exception) {
+                wideMode = previousWide
                 Toast.makeText(this, "Mode wide tidak tersedia di HP ini", Toast.LENGTH_SHORT).show()
             }
         }, ContextCompat.getMainExecutor(this))
@@ -1483,6 +1499,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         return
                     }
                 }
+                // V73: gallery verification. Do not report success until the
+                // published MediaStore item still exists and has non-zero size.
+                if (savedUri == null || !verifyPublishedPhoto(savedUri)) {
+                    if (savedUri != null) {
+                        try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
+                    }
+                    statusText.text = "PHOTO VERIFY FAILED"
+                    Toast.makeText(this@MainActivity, "Foto belum terverifikasi di Galeri", Toast.LENGTH_LONG).show()
+                    return
+                }
                 statusText.text = "PHOTO SAVED"
                 Toast.makeText(this@MainActivity, "Foto tersimpan di Galeri > Pictures > JejakCam", Toast.LENGTH_SHORT).show()
             }
@@ -1504,6 +1530,27 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 Toast.makeText(this@MainActivity, "Gagal mengambil foto: ${exception.message}", Toast.LENGTH_LONG).show()
             }
         })
+    }
+
+    // V73: verify that MediaStore has a real, readable photo after finalization.
+    private fun verifyPublishedPhoto(uri: Uri): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
+        return try {
+            contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Images.Media.SIZE, MediaStore.Images.Media.MIME_TYPE),
+                null, null, null
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return false
+                val sizeIndex = cursor.getColumnIndex(MediaStore.Images.Media.SIZE)
+                val mimeIndex = cursor.getColumnIndex(MediaStore.Images.Media.MIME_TYPE)
+                val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else 0L
+                val mime = if (mimeIndex >= 0) cursor.getString(mimeIndex) else null
+                size > 0L && (mime == null || mime.equals("image/jpeg", ignoreCase = true))
+            } ?: false
+        } catch (_: Exception) {
+            false
+        }
     }
 
     // V57: release idle CameraX when the Activity goes to the background, but keep
