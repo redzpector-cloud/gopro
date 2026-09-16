@@ -28,6 +28,7 @@ import android.widget.TextView
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.CompoundButton
+import java.io.File
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1699,78 +1700,132 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             Toast.makeText(this, "Foto sedang diproses", Toast.LENGTH_SHORT).show()
             return
         }
+
         val capture = imageCapture ?: return
         if (!hasSafePhotoStorage()) {
             statusText.text = "STORAGE LOW"
-            Toast.makeText(this, "Penyimpanan terlalu penuh • kosongkan ruang sebelum mengambil foto", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this,
+                "Penyimpanan terlalu penuh • kosongkan ruang sebelum mengambil foto",
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
+
         photoCaptureInProgress = true
-        val name = String.format("JejakCam_%tY%<tm%<td_%<tH%<tM%<tS_%<L.jpg", java.util.Date())
-        // V66: create the MediaStore row first so a failed/aborted capture can be
-        // removed cleanly instead of leaving an empty or half-written photo.
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, name)
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/JejakCam")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Images.Media.IS_PENDING, 1)
-            }
-        }
-        // CameraX 1.4.x requires the MediaStore collection AND ContentValues.
-        // Let CameraX create the MediaStore row so the returned savedUri belongs
-        // to the actual capture operation.
-        val output = ImageCapture.OutputFileOptions.Builder(
-            contentResolver,
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            values
-        ).build()
-        capture.takePicture(output, ContextCompat.getMainExecutor(this), object : ImageCapture.OnImageSavedCallback {
-            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                photoCaptureInProgress = false
-                val savedUri = outputFileResults.savedUri
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && savedUri != null) {
-                    try {
-                        val publish = ContentValues().apply {
-                            put(MediaStore.Images.Media.IS_PENDING, 0)
-                        }
-                        val updated = contentResolver.update(savedUri, publish, null, null)
-                        if (updated <= 0) {
-                            // V72: do not leave a pending MediaStore item if it cannot be published.
-                            try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
-                            statusText.text = "PHOTO PUBLISH FAILED"
-                            Toast.makeText(this@MainActivity, "Foto gagal dipublikasikan ke Galeri", Toast.LENGTH_LONG).show()
-                            return
-                        }
-                    } catch (_: Exception) {
-                        // V72: best-effort cleanup of the exact capture URI.
-                        try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
-                        statusText.text = "PHOTO PUBLISH FAILED"
-                        Toast.makeText(this@MainActivity, "Foto gagal diselesaikan", Toast.LENGTH_LONG).show()
+        val name = String.format(
+            "JejakCam_%tY%<tm%<td_%<tH%<tM%<tS_%<L.jpg",
+            java.util.Date()
+        )
+
+        // V78: jangan tulis langsung ke MediaStore saat CameraX mengambil foto.
+        // Beberapa HAL/vendor dapat crash atau menghentikan Activity ketika output
+        // MediaStore masih PENDING. CameraX sekarang menulis JPEG ke cache terlebih
+        // dahulu; setelah capture benar-benar selesai, baru kita publish ke Galeri.
+        val tempFile = File.createTempFile("jejakcam_", ".jpg", cacheDir)
+
+        val output = ImageCapture.OutputFileOptions.Builder(tempFile).build()
+
+        capture.takePicture(
+            output,
+            ContextCompat.getMainExecutor(this),
+            object : ImageCapture.OnImageSavedCallback {
+
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    photoCaptureInProgress = false
+
+                    if (isFinishing || isDestroyed) {
+                        try { tempFile.delete() } catch (_: Exception) {}
                         return
                     }
+
+                    try {
+                        if (!tempFile.exists() || tempFile.length() <= 0L) {
+                            throw IllegalStateException("File foto kosong")
+                        }
+
+                        val values = ContentValues().apply {
+                            put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                put(
+                                    MediaStore.Images.Media.RELATIVE_PATH,
+                                    "Pictures/JejakCam"
+                                )
+                                put(MediaStore.Images.Media.IS_PENDING, 1)
+                            }
+                        }
+
+                        val savedUri = contentResolver.insert(
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            values
+                        ) ?: throw IllegalStateException("MediaStore insert gagal")
+
+                        try {
+                            contentResolver.openOutputStream(savedUri)?.use { outputStream ->
+                                tempFile.inputStream().use { input ->
+                                    input.copyTo(outputStream, 64 * 1024)
+                                }
+                            } ?: throw IllegalStateException("Tidak bisa membuka output foto")
+
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                val publish = ContentValues().apply {
+                                    put(MediaStore.Images.Media.IS_PENDING, 0)
+                                }
+                                val updated = contentResolver.update(
+                                    savedUri,
+                                    publish,
+                                    null,
+                                    null
+                                )
+                                if (updated <= 0) {
+                                    throw IllegalStateException("Foto gagal dipublikasikan")
+                                }
+                            }
+
+                            // Pastikan hasil sudah dapat dibaca sebelum menampilkan status sukses.
+                            if (!verifyPublishedPhoto(savedUri)) {
+                                throw IllegalStateException("Foto belum dapat dibaca")
+                            }
+
+                            statusText.text = "PHOTO SAVED"
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Foto tersimpan di Galeri > Pictures > JejakCam",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } catch (e: Exception) {
+                            try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) {}
+                            throw e
+                        } finally {
+                            try { tempFile.delete() } catch (_: Exception) {}
+                        }
+
+                    } catch (e: Exception) {
+                        try { tempFile.delete() } catch (_: Exception) {}
+                        statusText.text = "PHOTO SAVE FAILED"
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Foto berhasil diambil, tetapi gagal disimpan: ${e.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
-                statusText.text = "PHOTO SAVED"
-                Toast.makeText(this@MainActivity, "Foto tersimpan di Galeri > Pictures > JejakCam", Toast.LENGTH_SHORT).show()
+
+                override fun onError(exception: ImageCaptureException) {
+                    photoCaptureInProgress = false
+                    try { tempFile.delete() } catch (_: Exception) {}
+
+                    if (isFinishing || isDestroyed) return
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Gagal mengambil foto: ${exception.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
-            override fun onError(exception: ImageCaptureException) {
-                photoCaptureInProgress = false
-                // V68: CameraX may have created the MediaStore row before the
-                // capture failed. Remove that pending row so a failed capture
-                // never leaves an empty/unfinished item in the gallery.
-                try {
-                    val selection = "${MediaStore.Images.Media.DISPLAY_NAME}=? AND " +
-                        "${MediaStore.Images.Media.RELATIVE_PATH}=?"
-                    val args = arrayOf(name, "Pictures/JejakCam/")
-                    contentResolver.delete(
-                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                        selection,
-                        args
-                    )
-                } catch (_: Exception) { }
-                Toast.makeText(this@MainActivity, "Gagal mengambil foto: ${exception.message}", Toast.LENGTH_LONG).show()
-            }
-        })
+        )
     }
 
 
