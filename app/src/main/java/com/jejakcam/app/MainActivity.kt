@@ -1703,9 +1703,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         return free > 32L * 1024L * 1024L && freePct > 0.5
     }
 
-    // V80: FOTO dibuat sesederhana mungkin untuk mengisolasi crash.
-    // CameraX menyimpan JPEG ke internal app terlebih dahulu. Tidak ada
-    // MediaStore/Galeri/IS_PENDING/verify saat callback capture berjalan.
+    // V81: isolasi capture FOTO dari penulisan file/JPEG callback.
+    // Tidak membuat file dan tidak menyentuh MediaStore. CameraX hanya mengirim
+    // satu ImageProxy ke memory, lalu ImageProxy WAJIB ditutup.
     private fun capturePhoto() {
         if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
         if (photoCaptureInProgress) {
@@ -1722,56 +1722,31 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         photoCaptureInProgress = true
         statusText.text = "TAKING PHOTO..."
 
-        val photoDir = File(filesDir, "photos").apply { mkdirs() }
-        val name = String.format(
-            "JejakCam_%tY%<tm%<td_%<tH%<tM%<tS_%<L.jpg",
-            java.util.Date()
-        )
-        val photoFile = File(photoDir, name)
-
-        val output = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-
         try {
             capture.takePicture(
-                output,
                 ContextCompat.getMainExecutor(this),
-                object : ImageCapture.OnImageSavedCallback {
-
-                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                        photoCaptureInProgress = false
-
-                        if (isFinishing || isDestroyed) return
-
-                        val valid = try {
-                            photoFile.exists() && photoFile.length() > 0L
+                object : ImageCapture.OnImageCapturedCallback() {
+                    override fun onCaptureSuccess(image: androidx.camera.core.ImageProxy) {
+                        try {
+                            if (!isFinishing && !isDestroyed) {
+                                statusText.text = "PHOTO OK"
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Foto berhasil diambil",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         } catch (_: Exception) {
-                            false
-                        }
-
-                        if (valid) {
-                            statusText.text = "PHOTO OK"
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Foto berhasil diambil",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        } else {
-                            statusText.text = "PHOTO FAILED"
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Foto kosong",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            // Jangan biarkan update UI membuat callback crash.
+                        } finally {
+                            try { image.close() } catch (_: Exception) {}
+                            photoCaptureInProgress = false
                         }
                     }
 
                     override fun onError(exception: ImageCaptureException) {
                         photoCaptureInProgress = false
-
                         if (isFinishing || isDestroyed) return
-
-                        try { photoFile.delete() } catch (_: Exception) {}
-
                         statusText.text = "PHOTO FAILED"
                         Toast.makeText(
                             this@MainActivity,
@@ -1783,7 +1758,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             )
         } catch (e: Exception) {
             photoCaptureInProgress = false
-            try { photoFile.delete() } catch (_: Exception) {}
             statusText.text = "PHOTO FAILED"
             Toast.makeText(
                 this,
@@ -1792,7 +1766,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             ).show()
         }
     }
-
 
     // V73: verify that MediaStore has a real, readable photo after finalization.
     private fun verifyPublishedPhoto(uri: Uri): Boolean {
