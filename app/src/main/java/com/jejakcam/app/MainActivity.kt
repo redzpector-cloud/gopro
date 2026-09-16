@@ -489,6 +489,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         hudViews["battery"] = batteryText
 
         storageText = textView("STOR --", 9f, true).apply {
+            alpha = .72f
             background = getDrawable(R.drawable.bg_chip)
             setPadding(dp(8), 0, dp(8), 0)
             setOnClickListener {
@@ -507,6 +508,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         hudViews["gps"] = gpsText
 
         compassText = textView("N 000°", 10f, true).apply {
+            alpha = .72f
             background = getDrawable(R.drawable.bg_chip)
             setPadding(dp(8), 0, dp(8), 0)
         }
@@ -514,6 +516,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         hudViews["compass"] = compassText
 
         gpsStatsText = textView("MAX 0 • AVG 0 • 0.0 km", 9f, true).apply {
+            alpha = .62f
             background = getDrawable(R.drawable.bg_chip)
             setPadding(dp(8), 0, dp(8), 0)
         }
