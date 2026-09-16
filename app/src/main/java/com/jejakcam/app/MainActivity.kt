@@ -1687,10 +1687,25 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             Toast.makeText(this, "Hentikan rekaman dulu", Toast.LENGTH_SHORT).show()
             return
         }
+
+        // Mode FOTO dan VIDEO memakai kombinasi use-case CameraX yang berbeda.
+        // Jangan hanya mengganti flag; rebind kamera supaya VideoCapture benar-benar
+        // tersedia ketika berpindah dari FOTO -> VIDEO, dan sebaliknya.
         photoMode = enabled
-        recordIcon.text = if (enabled) "○" else "●"
-        statusText.text = if (enabled) "PHOTO READY" else "READY"
-        recordButton.background = getDrawable(R.drawable.bg_record)
+        requestedPhotoMode = enabled
+        cameraStartToken++
+        cameraRebindInProgress = true
+        cameraActive = false
+        recordButton.isEnabled = false
+        recordButton.alpha = .45f
+        statusText.text = if (enabled) "MENYIAPKAN FOTO..." else "MENYIAPKAN VIDEO..."
+        try {
+            ProcessCameraProvider.getInstance(this).get().unbindAll()
+        } catch (_: Exception) {}
+        camera = null
+        recorder = null
+        imageCapture = null
+        startCamera(!enabled && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
         Toast.makeText(this, if (enabled) "Mode FOTO" else "Mode VIDEO", Toast.LENGTH_SHORT).show()
     }
 
@@ -1703,9 +1718,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         return free > 32L * 1024L * 1024L && freePct > 0.5
     }
 
-    // V81: isolasi capture FOTO dari penulisan file/JPEG callback.
-    // Tidak membuat file dan tidak menyentuh MediaStore. CameraX hanya mengirim
-    // satu ImageProxy ke memory, lalu ImageProxy WAJIB ditutup.
+    // V82: FOTO disimpan dulu ke file aplikasi yang stabil, lalu dipublikasikan
+    // ke Pictures/JejakCam. Capture tidak lagi memakai ImageProxy-in-memory.
     private fun capturePhoto() {
         if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
         if (photoCaptureInProgress) {
@@ -1718,52 +1732,97 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             Toast.makeText(this, "Kamera foto belum siap", Toast.LENGTH_SHORT).show()
             return
         }
+        if (!hasSafePhotoStorage()) {
+            Toast.makeText(this, "Penyimpanan hampir penuh", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val dir = File(getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES) ?: filesDir, "JejakCam")
+        if (!dir.exists() && !dir.mkdirs()) {
+            Toast.makeText(this, "Folder foto tidak dapat dibuat", Toast.LENGTH_LONG).show()
+            return
+        }
+        val temp = File(dir, "photo_${System.currentTimeMillis()}.jpg")
+        val output = ImageCapture.OutputFileOptions.Builder(temp).build()
 
         photoCaptureInProgress = true
-        statusText.text = "TAKING PHOTO..."
+        recordButton.isEnabled = false
+        statusText.text = "MENYIMPAN FOTO..."
 
         try {
             capture.takePicture(
+                output,
                 ContextCompat.getMainExecutor(this),
-                object : ImageCapture.OnImageCapturedCallback() {
-                    override fun onCaptureSuccess(image: androidx.camera.core.ImageProxy) {
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(result: ImageCapture.OutputFileResults) {
                         try {
-                            if (!isFinishing && !isDestroyed) {
-                                statusText.text = "PHOTO OK"
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Foto berhasil diambil",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                            if (isFinishing || isDestroyed) return
+                            val savedUri = publishPhotoToGallery(temp)
+                            if (savedUri != null) {
+                                statusText.text = "PHOTO SAVED"
+                                Toast.makeText(this@MainActivity, "Foto tersimpan di Galeri", Toast.LENGTH_SHORT).show()
+                            } else {
+                                statusText.text = "PHOTO LOCAL"
+                                Toast.makeText(this@MainActivity, "Foto berhasil diambil, tetapi belum masuk Galeri", Toast.LENGTH_LONG).show()
                             }
-                        } catch (_: Exception) {
-                            // Jangan biarkan update UI membuat callback crash.
+                        } catch (e: Exception) {
+                            statusText.text = "PHOTO LOCAL"
+                            Toast.makeText(this@MainActivity, "Foto tersimpan sementara", Toast.LENGTH_LONG).show()
                         } finally {
-                            try { image.close() } catch (_: Exception) {}
+                            try { if (temp.exists()) temp.delete() } catch (_: Exception) {}
                             photoCaptureInProgress = false
+                            recordButton.isEnabled = true
+                            recordButton.alpha = 1f
                         }
                     }
 
                     override fun onError(exception: ImageCaptureException) {
                         photoCaptureInProgress = false
+                        recordButton.isEnabled = true
+                        recordButton.alpha = 1f
                         if (isFinishing || isDestroyed) return
                         statusText.text = "PHOTO FAILED"
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Gagal mengambil foto: ${exception.message ?: exception.imageCaptureError}",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        try { if (temp.exists()) temp.delete() } catch (_: Exception) {}
+                        Toast.makeText(this@MainActivity, "Gagal mengambil foto: ${exception.message ?: exception.imageCaptureError}", Toast.LENGTH_LONG).show()
                     }
                 }
             )
         } catch (e: Exception) {
             photoCaptureInProgress = false
+            recordButton.isEnabled = true
+            recordButton.alpha = 1f
+            try { if (temp.exists()) temp.delete() } catch (_: Exception) {}
             statusText.text = "PHOTO FAILED"
-            Toast.makeText(
-                this,
-                "Capture foto gagal: ${e.message ?: e.javaClass.simpleName}",
-                Toast.LENGTH_LONG
-            ).show()
+            Toast.makeText(this, "Capture foto gagal: ${e.message ?: e.javaClass.simpleName}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun publishPhotoToGallery(source: File): Uri? {
+        if (!source.exists() || source.length() <= 0L) return null
+        return try {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "JejakCam_${System.currentTimeMillis()}.jpg")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/JejakCam")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return null
+            try {
+                contentResolver.openOutputStream(uri)?.use { out -> source.inputStream().use { input -> input.copyTo(out) } }
+                    ?: throw IllegalStateException("OutputStream null")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+                    contentResolver.update(uri, done, null, null)
+                }
+                uri
+            } catch (e: Exception) {
+                try { contentResolver.delete(uri, null, null) } catch (_: Exception) {}
+                null
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 
