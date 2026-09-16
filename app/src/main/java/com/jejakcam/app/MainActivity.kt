@@ -660,13 +660,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         modeRow.addView(photoModeView,LinearLayout.LayoutParams(dp(118),dp(30)))
         bottomShade.addView(modeRow,LinearLayout.LayoutParams(-2,dp(30)))
 
-        val controls=FrameLayout(this).apply{setPadding(dp(4),dp(2),dp(4),dp(2))}
+        val controls=FrameLayout(this).apply{setPadding(dp(8),dp(3),dp(8),dp(3))}
         val gallery=textView("▣",25f).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{showJejakCamGallery()}}
-        controls.addView(gallery,FrameLayout.LayoutParams(dp(44),dp(44),Gravity.START or Gravity.CENTER_VERTICAL))
+        controls.addView(gallery,FrameLayout.LayoutParams(dp(48),dp(48),Gravity.START or Gravity.CENTER_VERTICAL))
         recordButton=Button(this).apply{text="";background=getDrawable(R.drawable.bg_record);elevation=dp(7).toFloat();setOnClickListener{toggleRecording()}}
-        controls.addView(recordButton,FrameLayout.LayoutParams(dp(72),dp(72),Gravity.CENTER))
+        controls.addView(recordButton,FrameLayout.LayoutParams(dp(76),dp(76),Gravity.CENTER))
         recordIcon=textView("●",29f,true).apply{setTextColor(0xFF111111.toInt());isClickable=false}
-        controls.addView(recordIcon,FrameLayout.LayoutParams(dp(72),dp(72),Gravity.CENTER))
+        controls.addView(recordIcon,FrameLayout.LayoutParams(dp(76),dp(76),Gravity.CENTER))
         // V22: GoPro-style lens/zoom presets. 0.5x switches to the widest rear camera
         // when the device exposes one; the other presets use CameraX digital zoom.
         val flip=textView("0.5×",16f,true).apply{
@@ -678,8 +678,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val close=textView("✕",18f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{closeCamera()}}
         hud.addView(close,FrameLayout.LayoutParams(dp(42),dp(42),Gravity.TOP or Gravity.END).apply{rightMargin=dp(10);topMargin=dp(52)})
-        controls.addView(flip,FrameLayout.LayoutParams(dp(44),dp(44),Gravity.END or Gravity.CENTER_VERTICAL))
-        bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(76)))
+        controls.addView(flip,FrameLayout.LayoutParams(dp(48),dp(48),Gravity.END or Gravity.CENTER_VERTICAL))
+        bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(82)))
 
         val lensRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         fun lensButton(label:String, ratio:Float): TextView = textView(label,10f,true).apply{
@@ -773,7 +773,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         actionRow.addView(pauseButton,LinearLayout.LayoutParams(dp(72),dp(24)).apply{leftMargin=dp(5)})
         bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(28)))
         hudViews["actionRow"] = actionRow
-        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(202),Gravity.BOTTOM))
+        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(208),Gravity.BOTTOM))
         hudViews["bottomControls"] = bottomShade
 
         root.addView(hud,FrameLayout.LayoutParams(-1,-1))
