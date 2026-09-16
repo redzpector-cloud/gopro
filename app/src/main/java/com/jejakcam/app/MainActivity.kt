@@ -620,14 +620,34 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background=getDrawable(R.drawable.bg_action_mode)
         }
         val videoMode=textView("VIDEO",11f,true).apply{
-            setPadding(dp(22),0,dp(22),0)
+            background=getDrawable(R.drawable.bg_mode_selected)
+            setTextColor(Color.BLACK)
+            setPadding(dp(18),0,dp(18),0)
             alpha=1f
         }
         val photoModeView=textView("FOTO",11f,true).apply{
-            alpha=.55f
-            setPadding(dp(22),0,dp(22),0)
-            setOnClickListener{activateCameraMode(true)}}
-        videoMode.setOnClickListener { activateCameraMode(false) }
+            background=getDrawable(R.drawable.bg_action_mode)
+            setTextColor(Color.WHITE)
+            alpha=.65f
+            setPadding(dp(18),0,dp(18),0)
+            setOnClickListener{
+                activateCameraMode(true)
+                background=getDrawable(R.drawable.bg_mode_selected)
+                setTextColor(Color.BLACK)
+                alpha=1f
+                videoMode.background=getDrawable(R.drawable.bg_action_mode)
+                videoMode.setTextColor(Color.WHITE)
+                videoMode.alpha=.65f
+            }}
+        videoMode.setOnClickListener {
+            activateCameraMode(false)
+            videoMode.background=getDrawable(R.drawable.bg_mode_selected)
+            videoMode.setTextColor(Color.BLACK)
+            videoMode.alpha=1f
+            photoModeView.background=getDrawable(R.drawable.bg_action_mode)
+            photoModeView.setTextColor(Color.WHITE)
+            photoModeView.alpha=.65f
+        }
         modeRow.addView(videoMode); modeRow.addView(photoModeView); bottomShade.addView(modeRow,LinearLayout.LayoutParams(-1,dp(34)))
 
         val controls=FrameLayout(this)
@@ -1483,6 +1503,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         loopText.text = "SEG 01"
         loopText.alpha = .72f
         statusText.text = "READY"
+                    statusText.background = getDrawable(R.drawable.bg_chip)
         if (::pauseButton.isInitialized) { pauseButton.text = "PAUSE"; pauseButton.alpha = .5f }
         recordButton.background = getDrawable(R.drawable.bg_record)
         recordIcon.text = "●"
@@ -1578,6 +1599,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     recordingPaused = false
                     thermalStopTriggered = false
                     statusText.text = if (loopRecordingOn) "● REC • LOOP" else "● REC"
+                    statusText.background = getDrawable(R.drawable.bg_status_rec)
                     loopText.text = if (loopRecordingOn) "SEG %02d • NEXT %s".format(segmentNumber, loopDurationLabel) else "SEG %02d".format(segmentNumber)
                     timerHandler.removeCallbacks(timerRunnable)
                     timerHandler.post(timerRunnable)
@@ -1590,11 +1612,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 is VideoRecordEvent.Pause -> {
                     recordingPaused = true
                     statusText.text = "PAUSED"
+                    statusText.background = getDrawable(R.drawable.bg_chip)
                     timerHandler.removeCallbacks(timerRunnable)
                 }
                 is VideoRecordEvent.Resume -> {
                     recordingPaused = false
                     statusText.text = if (loopRecordingOn) "● REC • LOOP" else "● REC"
+                    statusText.background = getDrawable(R.drawable.bg_status_rec)
                     loopText.text = if (loopRecordingOn) "SEG %02d • NEXT %s".format(segmentNumber, loopDurationLabel) else "SEG %02d".format(segmentNumber)
                     timerHandler.removeCallbacks(timerRunnable)
                     timerHandler.post(timerRunnable)
@@ -1937,6 +1961,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             timerHandler.removeCallbacks(countdownRunnable)
             timerText.text = "00:00"
             statusText.text = "READY"
+                    statusText.background = getDrawable(R.drawable.bg_chip)
             return
         }
         if (recording != null) {
