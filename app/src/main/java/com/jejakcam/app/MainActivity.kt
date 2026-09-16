@@ -26,6 +26,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.ScrollView
+import android.widget.Space
 import android.widget.Switch
 import android.widget.CompoundButton
 import java.io.File
@@ -622,14 +623,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val videoMode=textView("VIDEO",11f,true).apply{
             background=getDrawable(R.drawable.bg_mode_selected)
             setTextColor(Color.BLACK)
-            setPadding(dp(14),0,dp(14),0)
+            setPadding(dp(10),0,dp(10),0)
+            gravity=Gravity.CENTER
             alpha=1f
         }
         val photoModeView=textView("FOTO",11f,true).apply{
             background=getDrawable(R.drawable.bg_action_mode)
             setTextColor(Color.WHITE)
             alpha=.65f
-            setPadding(dp(14),0,dp(14),0)
+            setPadding(dp(10),0,dp(10),0)
+            gravity=Gravity.CENTER
             setOnClickListener{
                 activateCameraMode(true)
                 background=getDrawable(R.drawable.bg_mode_selected)
@@ -648,7 +651,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             photoModeView.setTextColor(Color.WHITE)
             photoModeView.alpha=.65f
         }
-        modeRow.addView(videoMode); modeRow.addView(photoModeView); bottomShade.addView(modeRow,LinearLayout.LayoutParams(-1,dp(28)))
+        modeRow.addView(videoMode,LinearLayout.LayoutParams(dp(112),dp(28)))
+        val modeGap = Space(this).apply { minimumWidth = dp(18) }
+        modeRow.addView(modeGap,LinearLayout.LayoutParams(dp(18),dp(1)))
+        modeRow.addView(photoModeView,LinearLayout.LayoutParams(dp(112),dp(28)))
+        bottomShade.addView(modeRow,LinearLayout.LayoutParams(-2,dp(28)))
 
         val controls=FrameLayout(this)
         val gallery=textView("▣",25f).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{showJejakCamGallery()}}
