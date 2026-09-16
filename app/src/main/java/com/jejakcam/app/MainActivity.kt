@@ -3,6 +3,7 @@ package com.jejakcam.app
 import android.Manifest
 import android.content.ContentValues
 import android.net.Uri
+import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Build
@@ -16,6 +17,10 @@ import android.view.View
 import android.view.WindowManager
 import android.view.ScaleGestureDetector
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.ThumbnailUtils
+import android.provider.MediaStore.Images
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -443,7 +448,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val homeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val galleryHome = Button(this).apply {
             text = "GALERI"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
-            setOnClickListener { Toast.makeText(this@MainActivity, "Video tersimpan di Galeri > Movies > JejakCam", Toast.LENGTH_SHORT).show() }
+            setOnClickListener { showJejakCamGallery() }
         }
         val settingsHome = Button(this).apply {
             text = "PENGATURAN"; textSize = 12f; setTextColor(Color.WHITE); background = getDrawable(R.drawable.bg_control)
@@ -452,7 +457,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V60  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V79  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -614,7 +619,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         modeRow.addView(videoMode); modeRow.addView(photoModeView); bottomShade.addView(modeRow,LinearLayout.LayoutParams(-1,dp(30)))
 
         val controls=FrameLayout(this)
-        val gallery=textView("▣",25f).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{Toast.makeText(this@MainActivity,"Galeri JejakCam",Toast.LENGTH_SHORT).show()}}
+        val gallery=textView("▣",25f).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{showJejakCamGallery()}}
         controls.addView(gallery,FrameLayout.LayoutParams(dp(54),dp(54),Gravity.START or Gravity.CENTER_VERTICAL))
         recordButton=Button(this).apply{text="";background=getDrawable(R.drawable.bg_record);elevation=dp(7).toFloat();setOnClickListener{toggleRecording()}}
         controls.addView(recordButton,FrameLayout.LayoutParams(dp(84),dp(84),Gravity.CENTER))
@@ -787,6 +792,168 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var cameraScreen: View
     private lateinit var homeScreen: View
 
+    // V79: JejakCam-only gallery. It intentionally reads only media created in
+    // Movies/JejakCam and Pictures/JejakCam, not the user's general Gallery.
+    private data class JejakMedia(val uri: Uri, val isVideo: Boolean, val name: String, val size: Long)
+
+    private fun showJejakCamGallery() {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(0xFF0B0B0B.toInt())
+        }
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val title = textView("GALERI JEJAKCAM", 19f, true)
+        header.addView(title, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val close = Button(this).apply {
+            text = "TUTUP"
+            textSize = 11f
+            setTextColor(Color.WHITE)
+            background = getDrawable(R.drawable.bg_control)
+            setOnClickListener { (overlay.parent as? android.view.ViewGroup)?.removeView(overlay) }
+        }
+        header.addView(close, LinearLayout.LayoutParams(dp(82), dp(44)))
+        page.addView(header)
+
+        val info = textView("Hanya foto/video dari JejakCam", 11f).apply { alpha = .65f }
+        page.addView(info, LinearLayout.LayoutParams(-1, dp(28)))
+
+        val scroll = ScrollView(this)
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(18))
+        }
+        scroll.addView(list, ScrollView.LayoutParams(-1, -2))
+        page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        overlay.addView(page, FrameLayout.LayoutParams(-1, -1))
+
+        val root = window.decorView.findViewById<FrameLayout>(android.R.id.content)
+        root.addView(overlay, FrameLayout.LayoutParams(-1, -1))
+        loadJejakCamGallery(list)
+    }
+
+    private fun loadJejakCamGallery(list: LinearLayout) {
+        list.removeAllViews()
+        val items = mutableListOf<JejakMedia>()
+        items += queryJejakMedia(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, "Movies/JejakCam/")
+        items += queryJejakMedia(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, false, "Pictures/JejakCam/")
+        items.sortByDescending { it.name }
+
+        if (items.isEmpty()) {
+            val empty = textView("Belum ada foto atau video JejakCam", 14f).apply { gravity = Gravity.CENTER; alpha = .7f }
+            list.addView(empty, LinearLayout.LayoutParams(-1, dp(100)))
+            return
+        }
+        items.forEach { media -> addGalleryItem(list, media) }
+    }
+
+    private fun queryJejakMedia(uri: Uri, isVideo: Boolean, relativePath: String): List<JejakMedia> {
+        val result = mutableListOf<JejakMedia>()
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.RELATIVE_PATH
+        )
+        val selection = "${MediaStore.MediaColumns.RELATIVE_PATH}=?"
+        try {
+            contentResolver.query(uri, projection, selection, arrayOf(relativePath),
+                "${MediaStore.MediaColumns.DATE_ADDED} DESC")?.use { c ->
+                val idCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val nameCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                val sizeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+                val mimeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
+                while (c.moveToNext()) {
+                    val id = c.getLong(idCol)
+                    val name = c.getString(nameCol) ?: "JejakCam"
+                    val size = c.getLong(sizeCol)
+                    val mime = c.getString(mimeCol) ?: ""
+                    if (size <= 0L) continue
+                    if (isVideo && !mime.startsWith("video/")) continue
+                    if (!isVideo && !mime.startsWith("image/")) continue
+                    result += JejakMedia(ContentUris.withAppendedId(uri, id), isVideo, name, size)
+                }
+            }
+        } catch (_: Throwable) { }
+        return result
+    }
+
+    private fun addGalleryItem(list: LinearLayout, media: JejakMedia) {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = getDrawable(R.drawable.bg_control)
+            isClickable = true
+            setOnClickListener { openJejakMedia(media.uri, media.isVideo) }
+        }
+        val thumb = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(0xFF222222.toInt())
+            try {
+                val bmp = if (media.isVideo) {
+                    ThumbnailUtils.createVideoThumbnail(this@MainActivity, media.uri, android.util.Size(dp(112), dp(72)))
+                } else {
+                    contentResolver.openInputStream(media.uri)?.use { BitmapFactory.decodeStream(it) }
+                }
+                if (bmp != null) setImageBitmap(bmp)
+            } catch (_: Throwable) { }
+        }
+        card.addView(thumb, LinearLayout.LayoutParams(dp(112), dp(72)).apply { rightMargin = dp(10) })
+        val meta = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
+        meta.addView(textView(if (media.isVideo) "VIDEO" else "FOTO", 10f, true))
+        meta.addView(textView(media.name, 12f).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE })
+        meta.addView(textView(formatMediaSize(media.size), 10f).apply { alpha = .6f })
+        card.addView(meta, LinearLayout.LayoutParams(0, dp(72), 1f))
+        val delete = Button(this).apply {
+            text = "HAPUS"
+            textSize = 10f
+            setTextColor(Color.WHITE)
+            background = getDrawable(R.drawable.bg_control)
+            setOnClickListener { confirmDeleteJejakMedia(media, list) }
+        }
+        card.addView(delete, LinearLayout.LayoutParams(dp(68), dp(46)))
+        list.addView(card, LinearLayout.LayoutParams(-1, dp(88)).apply { bottomMargin = dp(8) })
+    }
+
+    private fun confirmDeleteJejakMedia(media: JejakMedia, list: LinearLayout) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Hapus file?")
+            .setMessage(media.name)
+            .setNegativeButton("BATAL", null)
+            .setPositiveButton("HAPUS") { _, _ ->
+                try {
+                    val deleted = contentResolver.delete(media.uri, null, null)
+                    Toast.makeText(this, if (deleted > 0) "File dihapus" else "File tidak ditemukan", Toast.LENGTH_SHORT).show()
+                } catch (_: Throwable) {
+                    Toast.makeText(this, "File tidak bisa dihapus", Toast.LENGTH_SHORT).show()
+                }
+                loadJejakCamGallery(list)
+            }.show()
+    }
+
+    private fun openJejakMedia(uri: Uri, isVideo: Boolean) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, if (isVideo) "video/mp4" else "image/jpeg")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+        } catch (_: Throwable) {
+            Toast.makeText(this, "Tidak ada aplikasi untuk membuka file ini", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun formatMediaSize(bytes: Long): String {
+        val mb = bytes / (1024.0 * 1024.0)
+        return if (mb >= 1.0) String.format("%.1f MB", mb) else String.format("%.0f KB", bytes / 1024.0)
+    }
 
     private fun loadSettings() {
         stabilizerMode = prefs.getString("stabilizerMode", "AUTO") ?: "AUTO"
