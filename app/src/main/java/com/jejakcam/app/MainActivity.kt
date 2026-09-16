@@ -451,11 +451,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
 
-        // ===================== ACTION-CAM HUD =====================
+        // ===================== ACTION-CAM HUD / V61 UI POLISH =====================
         val hud = FrameLayout(this).apply { visibility = View.GONE }
 
         val topLeft = textView("ACTION", 13f, true).apply { background = getDrawable(R.drawable.bg_chip); setPadding(dp(12),0,dp(12),0) }
-        hud.addView(topLeft, FrameLayout.LayoutParams(dp(94), dp(38), Gravity.TOP or Gravity.START).apply { leftMargin=dp(14); topMargin=dp(14) })
+        hud.addView(topLeft, FrameLayout.LayoutParams(dp(94), dp(38), Gravity.TOP or Gravity.START).apply { leftMargin=dp(12); topMargin=dp(10) })
 
         val resolution = textView("1080P  •  AUTO", 13f, true).apply {
             background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0)
@@ -468,11 +468,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
             }
         }
-        hud.addView(resolution, FrameLayout.LayoutParams(dp(108), dp(38), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(14) })
+        hud.addView(resolution, FrameLayout.LayoutParams(dp(108), dp(38), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(10) })
         hudViews["resolution"] = resolution
 
         batteryText = textView("●  --%", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(9),0,dp(9),0) }
-        hud.addView(batteryText, FrameLayout.LayoutParams(dp(76), dp(38), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(14) })
+        hud.addView(batteryText, FrameLayout.LayoutParams(dp(76), dp(38), Gravity.TOP or Gravity.END).apply { rightMargin=dp(12); topMargin=dp(10) })
         hudViews["battery"] = batteryText
 
         storageText = textView("STOR --", 9f, true).apply {
@@ -482,7 +482,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 Toast.makeText(this@MainActivity, storageDetails(), Toast.LENGTH_SHORT).show()
             }
         }
-        hud.addView(storageText, FrameLayout.LayoutParams(dp(112), dp(30), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(106) })
+        hud.addView(storageText, FrameLayout.LayoutParams(dp(112), dp(30), Gravity.TOP or Gravity.END).apply { rightMargin=dp(12); topMargin=dp(102) })
         hudViews["storage"] = storageText
 
         gpsText = textView("GPS OFF", 10f, true).apply {
@@ -490,14 +490,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setPadding(dp(8), 0, dp(8), 0)
             setOnClickListener { toggleGps() }
         }
-        hud.addView(gpsText, FrameLayout.LayoutParams(dp(104), dp(34), Gravity.TOP or Gravity.START).apply { leftMargin=dp(14); topMargin=dp(106) })
+        hud.addView(gpsText, FrameLayout.LayoutParams(dp(104), dp(34), Gravity.TOP or Gravity.START).apply { leftMargin=dp(12); topMargin=dp(102) })
         hudViews["gps"] = gpsText
 
         compassText = textView("N 000°", 10f, true).apply {
             background = getDrawable(R.drawable.bg_chip)
             setPadding(dp(8), 0, dp(8), 0)
         }
-        hud.addView(compassText, FrameLayout.LayoutParams(dp(104), dp(34), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(106) })
+        hud.addView(compassText, FrameLayout.LayoutParams(dp(104), dp(34), Gravity.TOP or Gravity.END).apply { rightMargin=dp(12); topMargin=dp(102) })
         hudViews["compass"] = compassText
 
         gpsStatsText = textView("MAX 0 • AVG 0 • 0.0 km", 9f, true).apply {
@@ -511,39 +511,39 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background = getDrawable(R.drawable.bg_control)
             setOnClickListener { showSettings() }
         }
-        hud.addView(quickSettings, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(62) })
+        hud.addView(quickSettings, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.END).apply { rightMargin=dp(12); topMargin=dp(58) })
         hudViews["quickSettings"] = quickSettings
 
         statusText = textView("READY", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0) }
-        hud.addView(statusText, FrameLayout.LayoutParams(dp(96), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(62) })
+        hud.addView(statusText, FrameLayout.LayoutParams(dp(96), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(58) })
         hudViews["status"] = statusText
         timerText = textView("00:00", 15f, true)
-        hud.addView(timerText, FrameLayout.LayoutParams(dp(100), dp(38), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(94) })
+        hud.addView(timerText, FrameLayout.LayoutParams(dp(100), dp(38), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(92) })
         hudViews["timer"] = timerText
         loopText = textView("SEG 01", 9f, true).apply { alpha = .72f }
-        hud.addView(loopText, FrameLayout.LayoutParams(dp(170), dp(26), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(122) })
+        hud.addView(loopText, FrameLayout.LayoutParams(dp(170), dp(26), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(120) })
         hudViews["loopText"] = loopText
 
         horizonText = textView("— LEVEL • SMOOTH —", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.88f }
-        hud.addView(horizonText, FrameLayout.LayoutParams(dp(142), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(152) })
+        hud.addView(horizonText, FrameLayout.LayoutParams(dp(142), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(148) })
         hudViews["horizon"] = horizonText
 
         tiltText = textView("ROLL 0°  •  PITCH 0°", 10f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.78f }
-        hud.addView(tiltText, FrameLayout.LayoutParams(dp(150), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(190) })
+        hud.addView(tiltText, FrameLayout.LayoutParams(dp(150), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(184) })
         hudViews["tilt"] = tiltText
 
         val horizonToggle = textView("HORIZON ON", 11f, true).apply {
             background=getDrawable(R.drawable.bg_toggle)
             setOnClickListener { horizonLockOn=!horizonLockOn; horizonMode=if(horizonLockOn) "ON" else "OFF"; saveMode("horizonMode", horizonMode); text=if(horizonLockOn) "HORIZON ON" else "HORIZON OFF" }
         }
-        hud.addView(horizonToggle, FrameLayout.LayoutParams(dp(112), dp(36), Gravity.TOP or Gravity.START).apply { leftMargin=dp(14); topMargin=dp(64) })
+        hud.addView(horizonToggle, FrameLayout.LayoutParams(dp(112), dp(36), Gravity.TOP or Gravity.START).apply { leftMargin=dp(12); topMargin=dp(58) })
         hudViews["horizonToggle"] = horizonToggle
 
         stabilizationText = textView("STAB  AUTO", 11f, true).apply {
             background=getDrawable(R.drawable.bg_toggle)
             setOnClickListener { Toast.makeText(this@MainActivity,"EIS mengikuti kemampuan kamera HP",Toast.LENGTH_SHORT).show() }
         }
-        hud.addView(stabilizationText, FrameLayout.LayoutParams(dp(112), dp(36), Gravity.TOP or Gravity.END).apply { rightMargin=dp(14); topMargin=dp(64) })
+        hud.addView(stabilizationText, FrameLayout.LayoutParams(dp(112), dp(36), Gravity.TOP or Gravity.END).apply { rightMargin=dp(12); topMargin=dp(58) })
         hudViews["stabilization"] = stabilizationText
 
         val zoomPanel = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; gravity=Gravity.CENTER; background=getDrawable(R.drawable.bg_control); setPadding(dp(4),dp(4),dp(4),dp(4)) }
@@ -553,7 +553,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         zoomPanel.addView(plus,LinearLayout.LayoutParams(dp(46),dp(46)))
         zoomPanel.addView(zoomText,LinearLayout.LayoutParams(dp(46),dp(28)))
         zoomPanel.addView(minus,LinearLayout.LayoutParams(dp(46),dp(46)))
-        hud.addView(zoomPanel,FrameLayout.LayoutParams(dp(58),dp(130),Gravity.END or Gravity.CENTER_VERTICAL).apply{rightMargin=dp(12)})
+        hud.addView(zoomPanel,FrameLayout.LayoutParams(dp(58),dp(130),Gravity.END or Gravity.CENTER_VERTICAL).apply{rightMargin=dp(10)})
         hudViews["zoom"] = zoomPanel
 
         val exposurePanel=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER;background=getDrawable(R.drawable.bg_control)}
@@ -561,7 +561,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         exposureText=textView("EV 0",11f,true)
         val ep=Button(this).apply{text="+";textSize=18f;setTextColor(Color.WHITE);background=getDrawable(R.drawable.bg_zoom);setOnClickListener{changeExposure(1)}}
         exposurePanel.addView(em,LinearLayout.LayoutParams(dp(42),dp(42))); exposurePanel.addView(exposureText,LinearLayout.LayoutParams(dp(48),dp(42))); exposurePanel.addView(ep,LinearLayout.LayoutParams(dp(42),dp(42)))
-        hud.addView(exposurePanel,FrameLayout.LayoutParams(dp(136),dp(46),Gravity.START or Gravity.CENTER_VERTICAL).apply{leftMargin=dp(12)})
+        hud.addView(exposurePanel,FrameLayout.LayoutParams(dp(136),dp(46),Gravity.START or Gravity.CENTER_VERTICAL).apply{leftMargin=dp(10)})
         hudViews["exposure"] = exposurePanel
 
         val aeAfLock = textView("AE/AF",10f,true).apply {
@@ -597,7 +597,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
             }
         }
-        hud.addView(aeAfLock, FrameLayout.LayoutParams(dp(92),dp(40),Gravity.START or Gravity.CENTER_VERTICAL).apply{leftMargin=dp(154)})
+        hud.addView(aeAfLock, FrameLayout.LayoutParams(dp(92),dp(40),Gravity.START or Gravity.CENTER_VERTICAL).apply{leftMargin=dp(146)})
         hudViews["aeaf"] = aeAfLock
 
         val bottomShade=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL;setPadding(dp(18),dp(10),dp(18),dp(10));background=getDrawable(R.drawable.bg_bottom)}
@@ -624,7 +624,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         val close=textView("✕",18f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{closeCamera()}}
-        hud.addView(close,FrameLayout.LayoutParams(dp(48),dp(48),Gravity.TOP or Gravity.END).apply{rightMargin=dp(14);topMargin=dp(14)})
+        hud.addView(close,FrameLayout.LayoutParams(dp(48),dp(48),Gravity.TOP or Gravity.END).apply{rightMargin=dp(12);topMargin=dp(10)})
         controls.addView(flip,FrameLayout.LayoutParams(dp(54),dp(54),Gravity.END or Gravity.CENTER_VERTICAL))
         bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(90)))
 
@@ -720,7 +720,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         actionRow.addView(pauseButton,LinearLayout.LayoutParams(dp(82),dp(36)).apply{leftMargin=dp(5)})
         bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(38)))
         hudViews["actionRow"] = actionRow
-        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(232),Gravity.BOTTOM))
+        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(244),Gravity.BOTTOM))
         hudViews["bottomControls"] = bottomShade
 
         root.addView(hud,FrameLayout.LayoutParams(-1,-1))
