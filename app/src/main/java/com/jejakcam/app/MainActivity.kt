@@ -523,39 +523,39 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background = getDrawable(R.drawable.bg_control)
             setOnClickListener { showSettings() }
         }
-        hud.addView(quickSettings, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.TOP or Gravity.END).apply { rightMargin=dp(12); topMargin=dp(56) })
+        hud.addView(quickSettings, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.TOP or Gravity.END).apply { rightMargin=dp(12); topMargin=dp(52) })
         hudViews["quickSettings"] = quickSettings
 
         statusText = textView("READY", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0) }
-        hud.addView(statusText, FrameLayout.LayoutParams(dp(108), dp(32), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(56) })
+        hud.addView(statusText, FrameLayout.LayoutParams(dp(118), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(54) })
         hudViews["status"] = statusText
         timerText = textView("00:00", 15f, true)
-        hud.addView(timerText, FrameLayout.LayoutParams(dp(100), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(90) })
+        hud.addView(timerText, FrameLayout.LayoutParams(dp(100), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(84) })
         hudViews["timer"] = timerText
         loopText = textView("SEG 01", 9f, true).apply { alpha = .72f }
-        hud.addView(loopText, FrameLayout.LayoutParams(dp(170), dp(26), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(120) })
+        hud.addView(loopText, FrameLayout.LayoutParams(dp(170), dp(24), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(112) })
         hudViews["loopText"] = loopText
 
         horizonText = textView("— LEVEL • SMOOTH —", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.88f }
-        hud.addView(horizonText, FrameLayout.LayoutParams(dp(142), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(148) })
+        hud.addView(horizonText, FrameLayout.LayoutParams(dp(142), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(138) })
         hudViews["horizon"] = horizonText
 
         tiltText = textView("ROLL 0°  •  PITCH 0°", 10f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.78f }
-        hud.addView(tiltText, FrameLayout.LayoutParams(dp(150), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(184) })
+        hud.addView(tiltText, FrameLayout.LayoutParams(dp(150), dp(28), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(168) })
         hudViews["tilt"] = tiltText
 
         val horizonToggle = textView("HORIZON ON", 11f, true).apply {
             background=getDrawable(R.drawable.bg_toggle)
             setOnClickListener { horizonLockOn=!horizonLockOn; horizonMode=if(horizonLockOn) "ON" else "OFF"; saveMode("horizonMode", horizonMode); text=if(horizonLockOn) "HORIZON ON" else "HORIZON OFF" }
         }
-        hud.addView(horizonToggle, FrameLayout.LayoutParams(dp(108), dp(32), Gravity.TOP or Gravity.START).apply { leftMargin=dp(12); topMargin=dp(56) })
+        hud.addView(horizonToggle, FrameLayout.LayoutParams(dp(104), dp(30), Gravity.TOP or Gravity.START).apply { leftMargin=dp(12); topMargin=dp(54) })
         hudViews["horizonToggle"] = horizonToggle
 
         stabilizationText = textView("STAB  AUTO", 11f, true).apply {
             background=getDrawable(R.drawable.bg_toggle)
             setOnClickListener { Toast.makeText(this@MainActivity,"EIS mengikuti kemampuan kamera HP",Toast.LENGTH_SHORT).show() }
         }
-        hud.addView(stabilizationText, FrameLayout.LayoutParams(dp(108), dp(32), Gravity.TOP or Gravity.END).apply { rightMargin=dp(64); topMargin=dp(56) })
+        hud.addView(stabilizationText, FrameLayout.LayoutParams(dp(104), dp(30), Gravity.TOP or Gravity.END).apply { rightMargin=dp(64); topMargin=dp(54) })
         hudViews["stabilization"] = stabilizationText
 
         val zoomPanel = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; gravity=Gravity.CENTER; background=getDrawable(R.drawable.bg_control); setPadding(dp(4),dp(4),dp(4),dp(4)) }
@@ -648,15 +648,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             photoModeView.setTextColor(Color.WHITE)
             photoModeView.alpha=.65f
         }
-        modeRow.addView(videoMode); modeRow.addView(photoModeView); bottomShade.addView(modeRow,LinearLayout.LayoutParams(-1,dp(34)))
+        modeRow.addView(videoMode); modeRow.addView(photoModeView); bottomShade.addView(modeRow,LinearLayout.LayoutParams(-1,dp(32)))
 
         val controls=FrameLayout(this)
         val gallery=textView("▣",25f).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{showJejakCamGallery()}}
-        controls.addView(gallery,FrameLayout.LayoutParams(dp(46),dp(46),Gravity.START or Gravity.CENTER_VERTICAL))
+        controls.addView(gallery,FrameLayout.LayoutParams(dp(44),dp(44),Gravity.START or Gravity.CENTER_VERTICAL))
         recordButton=Button(this).apply{text="";background=getDrawable(R.drawable.bg_record);elevation=dp(7).toFloat();setOnClickListener{toggleRecording()}}
-        controls.addView(recordButton,FrameLayout.LayoutParams(dp(78),dp(78),Gravity.CENTER))
+        controls.addView(recordButton,FrameLayout.LayoutParams(dp(74),dp(74),Gravity.CENTER))
         recordIcon=textView("●",27f,true).apply{setTextColor(0xFF111111.toInt());isClickable=false}
-        controls.addView(recordIcon,FrameLayout.LayoutParams(dp(78),dp(78),Gravity.CENTER))
+        controls.addView(recordIcon,FrameLayout.LayoutParams(dp(74),dp(74),Gravity.CENTER))
         // V22: GoPro-style lens/zoom presets. 0.5x switches to the widest rear camera
         // when the device exposes one; the other presets use CameraX digital zoom.
         val flip=textView("0.5×",16f,true).apply{
@@ -667,9 +667,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         val close=textView("✕",18f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{closeCamera()}}
-        hud.addView(close,FrameLayout.LayoutParams(dp(44),dp(44),Gravity.TOP or Gravity.END).apply{rightMargin=dp(10);topMargin=dp(56)})
-        controls.addView(flip,FrameLayout.LayoutParams(dp(46),dp(46),Gravity.END or Gravity.CENTER_VERTICAL))
-        bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(78)))
+        hud.addView(close,FrameLayout.LayoutParams(dp(42),dp(42),Gravity.TOP or Gravity.END).apply{rightMargin=dp(10);topMargin=dp(52)})
+        controls.addView(flip,FrameLayout.LayoutParams(dp(44),dp(44),Gravity.END or Gravity.CENTER_VERTICAL))
+        bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(72)))
 
         val lensRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         fun lensButton(label:String, ratio:Float): TextView = textView(label,10f,true).apply{
@@ -680,7 +680,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         lensRow.addView(lensButton("1×",1f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(4)})
         lensRow.addView(lensButton("2×",2f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(4)})
         lensRow.addView(lensButton("4×",4f),LinearLayout.LayoutParams(dp(58),dp(30)))
-        bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(34)))
+        bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(30)))
         hudViews["lensRow"] = lensRow
 
         val quickRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
@@ -738,8 +738,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
             }
         }
-        quickRow.addView(quick,LinearLayout.LayoutParams(dp(84),dp(30)).apply{rightMargin=dp(5)});quickRow.addView(loop,LinearLayout.LayoutParams(dp(72),dp(30)).apply{leftMargin=dp(5);rightMargin=dp(5)});quickRow.addView(mic,LinearLayout.LayoutParams(dp(72),dp(30)).apply{leftMargin=dp(5)})
-        bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(34)))
+        quickRow.addView(quick,LinearLayout.LayoutParams(dp(84),dp(28)).apply{rightMargin=dp(4)});quickRow.addView(loop,LinearLayout.LayoutParams(dp(72),dp(28)).apply{leftMargin=dp(4);rightMargin=dp(4)});quickRow.addView(mic,LinearLayout.LayoutParams(dp(72),dp(28)).apply{leftMargin=dp(4)})
+        bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(30)))
         hudViews["quickRow"] = quickRow
 
         val actionRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
@@ -761,9 +761,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         actionRow.addView(countdownBtn,LinearLayout.LayoutParams(dp(88),dp(28)).apply{rightMargin=dp(5)})
         actionRow.addView(pauseButton,LinearLayout.LayoutParams(dp(76),dp(28)).apply{leftMargin=dp(5)})
-        bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(28)))
+        bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(26)))
         hudViews["actionRow"] = actionRow
-        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(194),Gravity.BOTTOM))
+        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(170),Gravity.BOTTOM))
         hudViews["bottomControls"] = bottomShade
 
         root.addView(hud,FrameLayout.LayoutParams(-1,-1))
