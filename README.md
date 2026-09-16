@@ -17,3 +17,6 @@ Catatan: horizon assist adalah indikator level; koreksi horizon video penuh teta
 
 ## V54
 Stability patch untuk lifecycle CameraX dan callback kamera tertunda. Lihat `V54_CAMERA_STABILITY.md`.
+
+
+V91: ActionCam HUD compact polish. Foto/video, capture, recording, gallery, focus, and zoom logic retained.

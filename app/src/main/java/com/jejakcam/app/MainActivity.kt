@@ -459,7 +459,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V88  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V91  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -468,7 +468,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val hud = FrameLayout(this).apply { visibility = View.GONE }
 
         val topLeft = textView("● JEJAKCAM PRO", 11f, true).apply { background = getDrawable(R.drawable.bg_chip); setPadding(dp(12),0,dp(12),0); letterSpacing = 0.08f }
-        hud.addView(topLeft, FrameLayout.LayoutParams(dp(146), dp(38), Gravity.TOP or Gravity.START).apply { leftMargin=dp(10); topMargin=dp(10) })
+        hud.addView(topLeft, FrameLayout.LayoutParams(dp(132), dp(34), Gravity.TOP or Gravity.START).apply { leftMargin=dp(10); topMargin=dp(10) })
 
         val resolution = textView("1080P  •  AUTO", 13f, true).apply {
             background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0)
@@ -481,11 +481,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
             }
         }
-        hud.addView(resolution, FrameLayout.LayoutParams(dp(120), dp(38), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(10) })
+        hud.addView(resolution, FrameLayout.LayoutParams(dp(108), dp(34), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(10) })
         hudViews["resolution"] = resolution
 
         batteryText = textView("●  --%", 12f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(9),0,dp(9),0) }
-        hud.addView(batteryText, FrameLayout.LayoutParams(dp(82), dp(38), Gravity.TOP or Gravity.END).apply { rightMargin=dp(10); topMargin=dp(10) })
+        hud.addView(batteryText, FrameLayout.LayoutParams(dp(76), dp(34), Gravity.TOP or Gravity.END).apply { rightMargin=dp(10); topMargin=dp(10) })
         hudViews["battery"] = batteryText
 
         storageText = textView("STOR --", 9f, true).apply {
@@ -528,21 +528,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         hudViews["quickSettings"] = quickSettings
 
         statusText = textView("READY", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0) }
-        hud.addView(statusText, FrameLayout.LayoutParams(dp(118), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(54) })
+        hud.addView(statusText, FrameLayout.LayoutParams(dp(112), dp(28), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(52) })
         hudViews["status"] = statusText
         timerText = textView("00:00", 15f, true)
-        hud.addView(timerText, FrameLayout.LayoutParams(dp(100), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(84) })
+        hud.addView(timerText, FrameLayout.LayoutParams(dp(94), dp(28), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(80) })
         hudViews["timer"] = timerText
         loopText = textView("SEG 01", 9f, true).apply { alpha = .72f }
-        hud.addView(loopText, FrameLayout.LayoutParams(dp(170), dp(24), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(112) })
+        hud.addView(loopText, FrameLayout.LayoutParams(dp(154), dp(22), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(106) })
         hudViews["loopText"] = loopText
 
         horizonText = textView("— LEVEL • SMOOTH —", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.88f }
-        hud.addView(horizonText, FrameLayout.LayoutParams(dp(142), dp(30), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(138) })
+        hud.addView(horizonText, FrameLayout.LayoutParams(dp(132), dp(28), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(130) })
         hudViews["horizon"] = horizonText
 
         tiltText = textView("ROLL 0°  •  PITCH 0°", 10f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.78f }
-        hud.addView(tiltText, FrameLayout.LayoutParams(dp(150), dp(28), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(168) })
+        hud.addView(tiltText, FrameLayout.LayoutParams(dp(140), dp(26), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(158) })
         hudViews["tilt"] = tiltText
 
         val horizonToggle = textView("HORIZON ON", 11f, true).apply {
