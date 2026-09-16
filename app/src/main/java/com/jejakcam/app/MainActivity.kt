@@ -103,6 +103,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var rotationSensor: Sensor? = null
     private var gyroSensor: Sensor? = null
     private var lastGyroUpdateNs = 0L
+    // V74: throttle high-frequency sensor HUD updates to reduce UI/CPU load.
+    private var lastSensorHudUpdateMs = 0L
     private var gyroMotion = 0f
     private var filteredRoll = 0f
     private var filteredPitch = 0f
@@ -179,7 +181,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private val thermalRunnable = object : Runnable {
         override fun run() {
             checkThermalAndBatterySafety()
-            thermalHandler.postDelayed(this, 5000L)
+            thermalHandler.postDelayed(this, 10000L)
         }
     }
 
@@ -224,7 +226,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         override fun run() {
             if (::storageText.isInitialized) updateStorageHud()
             checkLowStorageSafety()
-            storageHandler.postDelayed(this, 3000L)
+            storageHandler.postDelayed(this, 5000L)
         }
     }
 
@@ -263,7 +265,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     loopText.alpha = .72f
                 }
                 updateStorageHud()
-                timerHandler.postDelayed(this, 500)
+                timerHandler.postDelayed(this, 1000L)
             }
         }
     }
@@ -341,8 +343,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         loadSettings()
         buildUi()
         updateGpsStatus()
-        storageHandler.post(storageRunnable)
-        thermalHandler.post(thermalRunnable)
+        // V74: storage/thermal monitors run only while the camera screen is active.
         updateStorageHud()
         // V17: kamera TIDAK otomatis aktif saat aplikasi baru dibuka.
         // V57: onResume() may restore it only when state came from a prior
@@ -1112,6 +1113,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 exposureText.text = "EV 0"
                 statusText.text = "ACTION"
                 stabilizationText.text = if (stabilizationOn) "STAB  AUTO" else "STAB  OFF"
+                startPerformanceMonitors()
             } catch (e: Exception) {
                 provider.unbindAll()
                 camera = null
@@ -1119,6 +1121,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 recorder = null
                 imageCapture = null
                 cameraRebindInProgress = false
+                stopPerformanceMonitors()
                 Toast.makeText(
                     this,
                     "Kamera tidak kompatibel dengan mode ini. Silakan coba lagi: ${e.message}",
@@ -1556,6 +1559,19 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     // V57: release idle CameraX when the Activity goes to the background, but keep
     // the user's intent so onResume()/configuration recreation can reopen it automatically. This avoids stale
     // camera bindings after screen-off/app-switch while preserving the home UI state.
+    // V74: avoid background polling when the camera is not visible.
+    private fun startPerformanceMonitors() {
+        storageHandler.removeCallbacks(storageRunnable)
+        thermalHandler.removeCallbacks(thermalRunnable)
+        storageHandler.post(storageRunnable)
+        thermalHandler.post(thermalRunnable)
+    }
+
+    private fun stopPerformanceMonitors() {
+        storageHandler.removeCallbacks(storageRunnable)
+        thermalHandler.removeCallbacks(thermalRunnable)
+    }
+
     private fun releaseCameraForBackground() {
         if (!cameraActive || recording != null) return
         cameraStartToken++
@@ -1566,6 +1582,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         recorder = null
         imageCapture = null
         cameraActive = false
+        stopPerformanceMonitors()
         backgroundCameraRelease = true
     }
 
@@ -1584,6 +1601,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         recorder = null
         imageCapture = null
         cameraActive = false
+        stopPerformanceMonitors()
         previewView.visibility = View.GONE
         cameraScreen.visibility = View.GONE
         homeScreen.visibility = View.VISIBLE
@@ -1873,8 +1891,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onResume() {
         activityStopping = false
         super.onResume()
-        rotationSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
-        gyroSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+        rotationSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+        gyroSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
 
         // V56: restore the camera only when the user had previously opened it.
         if (cameraRequested && !cameraActive && backgroundCameraRelease &&
@@ -1918,6 +1936,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
 
         if (event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastSensorHudUpdateMs < 100L) return
+        lastSensorHudUpdateMs = nowMs
         val matrix = FloatArray(9)
         SensorManager.getRotationMatrixFromVector(matrix, event.values)
         val orientation = FloatArray(3)
