@@ -161,6 +161,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var recordingSessionId = 0L
     // V61: blocks a new recording while CameraX is finalizing the previous file.
     private var recordingFinalizing = false
+    // V77: if Android interrupts the camera session (for example an incoming call),
+    // remember that an active recording should be restarted after the interruption.
+    // The previous segment is finalized by CameraX first; we never reuse a stale Recording object.
+    private var resumeRecordingAfterInterruption = false
     // V65: prevents rapid repeated PHOTO taps from queuing multiple captures.
     private var photoCaptureInProgress = false
 
@@ -310,6 +314,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        resumeRecordingAfterInterruption = savedInstanceState?.getBoolean("resume_recording_after_interruption", false) ?: false
         hideSystemBars()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
@@ -1114,6 +1119,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 statusText.text = "ACTION"
                 stabilizationText.text = if (stabilizationOn) "STAB  AUTO" else "STAB  OFF"
                 startPerformanceMonitors()
+                // V77: CameraX may have finalized the old recording while the app was
+                // interrupted. Once the camera is rebound, begin a fresh segment.
+                if (resumeRecordingAfterInterruption && !photoMode && recording == null &&
+                    !isFinishing && !isDestroyed) {
+                    resumeRecordingAfterInterruption = false
+                    timerHandler.postDelayed({
+                        if (cameraActive && !photoMode && recording == null && !isFinishing && !isDestroyed) {
+                            startSegment()
+                        }
+                    }, 350L)
+                }
             } catch (e: Exception) {
                 provider.unbindAll()
                 camera = null
@@ -1944,6 +1960,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         // persist an active Recording object; CameraX owns that lifecycle.
         outState.putBoolean("camera_requested", cameraRequested)
         outState.putBoolean("requested_photo_mode", requestedPhotoMode)
+        outState.putBoolean("resume_recording_after_interruption", resumeRecordingAfterInterruption)
         super.onSaveInstanceState(outState)
     }
 
@@ -1961,9 +1978,28 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             startCamera(!requestedPhotoMode &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
         }
+
+        // V77: if the camera stayed bound but Android finalized the recording during
+        // an interruption, create a new segment without touching the previous file.
+        if (resumeRecordingAfterInterruption && cameraActive && !photoMode && recording == null &&
+            !recordingFinalizing && !isFinishing && !isDestroyed) {
+            resumeRecordingAfterInterruption = false
+            timerHandler.postDelayed({
+                if (cameraActive && !photoMode && recording == null && !isFinishing && !isDestroyed) {
+                    startSegment()
+                }
+            }, 350L)
+        }
     }
 
     override fun onPause() {
+        // V77: preserve the user's recording intent across lifecycle interruptions.
+        // If the active Recording survives, nothing is restarted. If Android ends it
+        // because another app takes the camera/mic (such as a call), onResume() will
+        // rebind the camera and start a fresh, safe segment.
+        if (recording != null && !recordingFinalizing) {
+            resumeRecordingAfterInterruption = true
+        }
         sensorManager.unregisterListener(this)
         if (gpsEnabled) stopGpsUpdates()
         super.onPause()
