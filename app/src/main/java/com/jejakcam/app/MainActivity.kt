@@ -1005,84 +1005,80 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             if (startToken != cameraStartToken || isFinishing || isDestroyed) return@addListener
-            val provider = try { future.get() } catch (e: Exception) {
+
+            val provider = try {
+                future.get()
+            } catch (e: Exception) {
                 cameraRebindInProgress = false
-                Toast.makeText(this, "CameraX gagal menyiapkan kamera: ${e.message}", Toast.LENGTH_LONG).show()
+                cameraActive = false
+                Toast.makeText(this, "Kamera tidak dapat disiapkan: ${e.message}", Toast.LENGTH_LONG).show()
                 return@addListener
             }
 
-            // Action-camera tuning: continuous video AF + video stabilization.
-            // CameraX 1.4+ provides hardware/device video stabilization when supported.
-            val previewBuilder = Preview.Builder()
-            Camera2Interop.Extender(previewBuilder)
-                .setCaptureRequestOption(
-                    CaptureRequest.CONTROL_AF_MODE,
-                    CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
-                )
-                .setCaptureRequestOption(
-                    CaptureRequest.CONTROL_AE_MODE,
-                    CameraMetadata.CONTROL_AE_MODE_ON
-                )
-            // Do not call Preview.Builder#setPreviewStabilizationEnabled here.
-            // CameraX Preview.Builder does not expose that API on the versions used
-            // by this project. Stabilization is applied to VideoCapture below, with
-            // a safe fallback when the device HAL does not support it.
-            val preview = previewBuilder.build().also {
-                it.surfaceProvider = previewView.surfaceProvider
+            // V62: gunakan konfigurasi CameraX yang paling kompatibel.
+            // Jangan memaksa CaptureRequest Camera2 karena beberapa HAL/vendor
+            // menolak kombinasi request tertentu dan dapat membuat aplikasi crash.
+            val preview = try {
+                Preview.Builder().build().also {
+                    it.surfaceProvider = previewView.surfaceProvider
+                }
+            } catch (e: Exception) {
+                cameraRebindInProgress = false
+                Toast.makeText(this, "Preview kamera tidak kompatibel: ${e.message}", Toast.LENGTH_LONG).show()
+                return@addListener
             }
 
-            // V23: pilih kualitas video yang diminta, dengan fallback aman ke FHD.
-            // FPS tetap AUTO agar mengikuti kemampuan sensor/HAL perangkat.
-            val qualitySelector = QualitySelector.from(
-                selectedQuality,
-                FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
-            )
-            recorder = Recorder.Builder()
-                .setQualitySelector(qualitySelector)
-                .build()
+            val videoCapture = try {
+                val qualitySelector = QualitySelector.from(
+                    selectedQuality,
+                    FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+                )
+                recorder = Recorder.Builder()
+                    .setQualitySelector(qualitySelector)
+                    .build()
+                VideoCapture.withOutput(recorder!!)
+            } catch (_: Exception) {
+                try {
+                    recorder = Recorder.Builder().build()
+                    VideoCapture.withOutput(recorder!!)
+                } catch (e: Exception) {
+                    cameraRebindInProgress = false
+                    recorder = null
+                    Toast.makeText(this, "Video tidak didukung HP ini: ${e.message}", Toast.LENGTH_LONG).show()
+                    return@addListener
+                }
+            }
 
-            val videoBuilder = VideoCapture.Builder(recorder!!)
-            // Apply continuous video autofocus to the actual recording use case,
-            // not only the preview. This keeps AF tracking active while riding.
-            Camera2Interop.Extender(videoBuilder)
-                .setCaptureRequestOption(
-                    CaptureRequest.CONTROL_AF_MODE,
-                    CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
-                )
-                .setCaptureRequestOption(
-                    CaptureRequest.CONTROL_AE_MODE,
-                    CameraMetadata.CONTROL_AE_MODE_ON
-                )
-                .setCaptureRequestOption(
-                    CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
-                    if (stabilizationOn) CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON
-                    else CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF
-                )
-            // CameraX 1.4.1 does not expose setVideoStabilizationEnabled() on
-            // VideoCapture.Builder. The stabilization request above is applied
-            // through Camera2Interop instead, so build the use case directly.
-            val videoCapture = videoBuilder.build()
-
-            val image = ImageCapture.Builder()
-                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                .build()
+            val image = try {
+                ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
+            } catch (e: Exception) {
+                cameraRebindInProgress = false
+                recorder = null
+                Toast.makeText(this, "Foto tidak didukung HP ini: ${e.message}", Toast.LENGTH_LONG).show()
+                return@addListener
+            }
             imageCapture = image
 
-            provider.unbindAll()
             try {
                 if (startToken != cameraStartToken || isFinishing || isDestroyed) {
                     cameraRebindInProgress = false
                     return@addListener
                 }
+
+                provider.unbindAll()
                 camera = provider.bindToLifecycle(
                     this,
-                    currentCameraSelector(),
+                    CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
                     videoCapture,
                     image
                 )
+
                 cameraActive = true
                 cameraRebindInProgress = false
+                wideMode = false
                 previewView.visibility = View.VISIBLE
                 cameraScreen.visibility = View.VISIBLE
                 homeScreen.visibility = View.GONE
@@ -1099,53 +1095,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 aeAfLockOn = false
                 camera?.cameraControl?.setExposureCompensationIndex(0)
                 exposureText.text = "EV 0"
-                statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener) && stabilizationOn) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
-                stabilizationText.text = if (!stabilizationOn) "STAB  OFF" else if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) "STAB  HW" else "STAB  AUTO"
+                statusText.text = "ACTION"
+                stabilizationText.text = if (stabilizationOn) "STAB  AUTO" else "STAB  OFF"
             } catch (e: Exception) {
-                // If preview stabilization causes a device-specific HAL error, retry
-                // once without preview stabilization but keep recording stabilization.
-                try {
-                    if (startToken != cameraStartToken || isFinishing || isDestroyed) return@addListener
-                    provider.unbindAll()
-                    val fallbackPreviewBuilder = Preview.Builder()
-                    Camera2Interop.Extender(fallbackPreviewBuilder)
-                        .setCaptureRequestOption(
-                            CaptureRequest.CONTROL_AF_MODE,
-                            CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
-                        )
-                    val fallbackPreview = fallbackPreviewBuilder.build().also {
-                        it.surfaceProvider = previewView.surfaceProvider
-                    }
-                    camera = provider.bindToLifecycle(
-                        this,
-                        currentCameraSelector(),
-                        fallbackPreview,
-                        videoCapture,
-                        image
-                    )
-                    cameraActive = true
-                    cameraRebindInProgress = false
-                    previewView.visibility = View.VISIBLE
-                    cameraScreen.visibility = View.VISIBLE
-                    homeScreen.visibility = View.GONE
-                    cameraButton.text = "KAMERA AKTIF"
-                    cameraButton.alpha = 0.7f
-                    recordButton.isEnabled = true
-                    recordButton.alpha = 1f
-                    setZoom(0f)
-                    exposureIndex = 0
-                    camera?.cameraControl?.setExposureCompensationIndex(0)
-                    exposureText.text = "EV 0"
-                    statusText.text = if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener) && stabilizationOn) if (wideMode) "WIDE • EIS" else "ACTION • EIS" else if (wideMode) "WIDE" else "ACTION"
-                stabilizationText.text = if (!stabilizationOn) "STAB  OFF" else if (supportsVideoStabilization(camera?.cameraInfo ?: return@addListener)) "STAB  HW" else "STAB  AUTO"
-                } catch (fallbackError: Exception) {
-                    cameraRebindInProgress = false
-                    cameraActive = false
-                    camera = null
-                    recorder = null
-                    imageCapture = null
-                    Toast.makeText(this, "Kamera gagal dibuka: ${fallbackError.message}", Toast.LENGTH_LONG).show()
-                }
+                provider.unbindAll()
+                camera = null
+                cameraActive = false
+                recorder = null
+                imageCapture = null
+                cameraRebindInProgress = false
+                Toast.makeText(
+                    this,
+                    "Kamera tidak kompatibel dengan mode ini. Silakan coba lagi: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }, ContextCompat.getMainExecutor(this))
     }
