@@ -1705,80 +1705,74 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             Toast.makeText(this, "Penyimpanan terlalu penuh • kosongkan ruang sebelum mengambil foto", Toast.LENGTH_LONG).show()
             return
         }
-
         photoCaptureInProgress = true
-        statusText.text = "CAPTURING PHOTO"
         val name = String.format("JejakCam_%tY%<tm%<td_%<tH%<tM%<tS_%<L.jpg", java.util.Date())
-        // V79 FIX-2: CameraX first writes to an app-private temporary file.
-        // This prevents MediaStore publication/verification from interfering
-        // with the actual camera capture and makes failed captures easy to clean.
-        val tempFile = java.io.File(cacheDir, "photo_$name.tmp.jpg")
-        try { if (tempFile.exists()) tempFile.delete() } catch (_: Exception) { }
-
-        val output = ImageCapture.OutputFileOptions.Builder(tempFile).build()
+        // V66: create the MediaStore row first so a failed/aborted capture can be
+        // removed cleanly instead of leaving an empty or half-written photo.
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, name)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/JejakCam")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+        // CameraX 1.4.x requires the MediaStore collection AND ContentValues.
+        // Let CameraX create the MediaStore row so the returned savedUri belongs
+        // to the actual capture operation.
+        val output = ImageCapture.OutputFileOptions.Builder(
+            contentResolver,
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            values
+        ).build()
         capture.takePicture(output, ContextCompat.getMainExecutor(this), object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                try {
-                    if (!tempFile.exists() || tempFile.length() <= 0L) {
-                        throw java.io.IOException("temporary photo is empty")
-                    }
-
-                    val values = ContentValues().apply {
-                        put(MediaStore.Images.Media.DISPLAY_NAME, name)
-                        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/JejakCam")
-                            put(MediaStore.Images.Media.IS_PENDING, 1)
-                        }
-                    }
-                    val savedUri = contentResolver.insert(
-                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                        values
-                    ) ?: throw java.io.IOException("MediaStore insert failed")
-
-                    try {
-                        contentResolver.openOutputStream(savedUri, "w")?.use { out ->
-                            java.io.FileInputStream(tempFile).use { input -> input.copyTo(out) }
-                        } ?: throw java.io.IOException("MediaStore output stream unavailable")
-
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            val publish = ContentValues().apply {
-                                put(MediaStore.Images.Media.IS_PENDING, 0)
-                            }
-                            if (contentResolver.update(savedUri, publish, null, null) <= 0) {
-                                throw java.io.IOException("MediaStore publish failed")
-                            }
-                        }
-
-                        if (!verifyPublishedPhoto(savedUri)) {
-                            throw java.io.IOException("photo verification failed")
-                        }
-
-                        statusText.text = "PHOTO SAVED"
-                        Toast.makeText(this@MainActivity, "Foto tersimpan di Galeri > Pictures > JejakCam", Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
-                        throw e
-                    } finally {
-                        try { tempFile.delete() } catch (_: Exception) { }
-                    }
-                } catch (e: Exception) {
-                    try { tempFile.delete() } catch (_: Exception) { }
-                    statusText.text = "PHOTO FAILED"
-                    Toast.makeText(this@MainActivity, "Foto gagal disimpan: ${e.message ?: "unknown error"}", Toast.LENGTH_LONG).show()
-                } finally {
-                    photoCaptureInProgress = false
-                }
-            }
-
-            override fun onError(exception: ImageCaptureException) {
-                try { tempFile.delete() } catch (_: Exception) { }
                 photoCaptureInProgress = false
-                statusText.text = "PHOTO FAILED"
+                val savedUri = outputFileResults.savedUri
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && savedUri != null) {
+                    try {
+                        val publish = ContentValues().apply {
+                            put(MediaStore.Images.Media.IS_PENDING, 0)
+                        }
+                        val updated = contentResolver.update(savedUri, publish, null, null)
+                        if (updated <= 0) {
+                            // V72: do not leave a pending MediaStore item if it cannot be published.
+                            try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
+                            statusText.text = "PHOTO PUBLISH FAILED"
+                            Toast.makeText(this@MainActivity, "Foto gagal dipublikasikan ke Galeri", Toast.LENGTH_LONG).show()
+                            return
+                        }
+                    } catch (_: Exception) {
+                        // V72: best-effort cleanup of the exact capture URI.
+                        try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) { }
+                        statusText.text = "PHOTO PUBLISH FAILED"
+                        Toast.makeText(this@MainActivity, "Foto gagal diselesaikan", Toast.LENGTH_LONG).show()
+                        return
+                    }
+                }
+                statusText.text = "PHOTO SAVED"
+                Toast.makeText(this@MainActivity, "Foto tersimpan di Galeri > Pictures > JejakCam", Toast.LENGTH_SHORT).show()
+            }
+            override fun onError(exception: ImageCaptureException) {
+                photoCaptureInProgress = false
+                // V68: CameraX may have created the MediaStore row before the
+                // capture failed. Remove that pending row so a failed capture
+                // never leaves an empty/unfinished item in the gallery.
+                try {
+                    val selection = "${MediaStore.Images.Media.DISPLAY_NAME}=? AND " +
+                        "${MediaStore.Images.Media.RELATIVE_PATH}=?"
+                    val args = arrayOf(name, "Pictures/JejakCam/")
+                    contentResolver.delete(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        selection,
+                        args
+                    )
+                } catch (_: Exception) { }
                 Toast.makeText(this@MainActivity, "Gagal mengambil foto: ${exception.message}", Toast.LENGTH_LONG).show()
             }
         })
     }
+
 
     // V73: verify that MediaStore has a real, readable photo after finalization.
     private fun verifyPublishedPhoto(uri: Uri): Boolean {
