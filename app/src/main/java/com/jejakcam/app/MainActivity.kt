@@ -1703,6 +1703,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         return free > 32L * 1024L * 1024L && freePct > 0.5
     }
 
+    // V80: FOTO dibuat sesederhana mungkin untuk mengisolasi crash.
+    // CameraX menyimpan JPEG ke internal app terlebih dahulu. Tidak ada
+    // MediaStore/Galeri/IS_PENDING/verify saat callback capture berjalan.
     private fun capturePhoto() {
         if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
         if (photoCaptureInProgress) {
@@ -1710,137 +1713,84 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             return
         }
 
-        val capture = imageCapture ?: return
-        if (!hasSafePhotoStorage()) {
-            statusText.text = "STORAGE LOW"
-            Toast.makeText(
-                this,
-                "Penyimpanan terlalu penuh • kosongkan ruang sebelum mengambil foto",
-                Toast.LENGTH_LONG
-            ).show()
+        val capture = imageCapture
+        if (capture == null) {
+            Toast.makeText(this, "Kamera foto belum siap", Toast.LENGTH_SHORT).show()
             return
         }
 
         photoCaptureInProgress = true
+        statusText.text = "TAKING PHOTO..."
+
+        val photoDir = File(filesDir, "photos").apply { mkdirs() }
         val name = String.format(
             "JejakCam_%tY%<tm%<td_%<tH%<tM%<tS_%<L.jpg",
             java.util.Date()
         )
+        val photoFile = File(photoDir, name)
 
-        // V78: jangan tulis langsung ke MediaStore saat CameraX mengambil foto.
-        // Beberapa HAL/vendor dapat crash atau menghentikan Activity ketika output
-        // MediaStore masih PENDING. CameraX sekarang menulis JPEG ke cache terlebih
-        // dahulu; setelah capture benar-benar selesai, baru kita publish ke Galeri.
-        val tempFile = try {
-            File.createTempFile("jejakcam_", ".jpg", cacheDir)
-        } catch (e: Exception) {
-            photoCaptureInProgress = false
-            Toast.makeText(this, "Tidak bisa menyiapkan file foto: ${e.message}", Toast.LENGTH_LONG).show()
-            return
-        }
+        val output = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
-        val output = ImageCapture.OutputFileOptions.Builder(tempFile).build()
+        try {
+            capture.takePicture(
+                output,
+                ContextCompat.getMainExecutor(this),
+                object : ImageCapture.OnImageSavedCallback {
 
-        capture.takePicture(
-            output,
-            ContextCompat.getMainExecutor(this),
-            object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                        photoCaptureInProgress = false
 
-                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    photoCaptureInProgress = false
+                        if (isFinishing || isDestroyed) return
 
-                    if (isFinishing || isDestroyed) {
-                        try { tempFile.delete() } catch (_: Exception) {}
-                        return
-                    }
-
-                    try {
-                        if (!tempFile.exists() || tempFile.length() <= 0L) {
-                            throw IllegalStateException("File foto kosong")
+                        val valid = try {
+                            photoFile.exists() && photoFile.length() > 0L
+                        } catch (_: Exception) {
+                            false
                         }
 
-                        val values = ContentValues().apply {
-                            put(MediaStore.Images.Media.DISPLAY_NAME, name)
-                            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                put(
-                                    MediaStore.Images.Media.RELATIVE_PATH,
-                                    "Pictures/JejakCam"
-                                )
-                                put(MediaStore.Images.Media.IS_PENDING, 1)
-                            }
-                        }
-
-                        val savedUri = contentResolver.insert(
-                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                            values
-                        ) ?: throw IllegalStateException("MediaStore insert gagal")
-
-                        try {
-                            contentResolver.openOutputStream(savedUri)?.use { outputStream ->
-                                tempFile.inputStream().use { input ->
-                                    input.copyTo(outputStream, 64 * 1024)
-                                }
-                            } ?: throw IllegalStateException("Tidak bisa membuka output foto")
-
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                val publish = ContentValues().apply {
-                                    put(MediaStore.Images.Media.IS_PENDING, 0)
-                                }
-                                val updated = contentResolver.update(
-                                    savedUri,
-                                    publish,
-                                    null,
-                                    null
-                                )
-                                if (updated <= 0) {
-                                    throw IllegalStateException("Foto gagal dipublikasikan")
-                                }
-                            }
-
-                            // Pastikan hasil sudah dapat dibaca sebelum menampilkan status sukses.
-                            if (!verifyPublishedPhoto(savedUri)) {
-                                throw IllegalStateException("Foto belum dapat dibaca")
-                            }
-
-                            statusText.text = "PHOTO SAVED"
+                        if (valid) {
+                            statusText.text = "PHOTO OK"
                             Toast.makeText(
                                 this@MainActivity,
-                                "Foto tersimpan di Galeri > Pictures > JejakCam",
+                                "Foto berhasil diambil",
                                 Toast.LENGTH_SHORT
                             ).show()
-                        } catch (e: Exception) {
-                            try { contentResolver.delete(savedUri, null, null) } catch (_: Exception) {}
-                            throw e
-                        } finally {
-                            try { tempFile.delete() } catch (_: Exception) {}
+                        } else {
+                            statusText.text = "PHOTO FAILED"
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Foto kosong",
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
+                    }
 
-                    } catch (e: Exception) {
-                        try { tempFile.delete() } catch (_: Exception) {}
-                        statusText.text = "PHOTO SAVE FAILED"
+                    override fun onError(exception: ImageCaptureException) {
+                        photoCaptureInProgress = false
+
+                        if (isFinishing || isDestroyed) return
+
+                        try { photoFile.delete() } catch (_: Exception) {}
+
+                        statusText.text = "PHOTO FAILED"
                         Toast.makeText(
                             this@MainActivity,
-                            "Foto berhasil diambil, tetapi gagal disimpan: ${e.message}",
+                            "Gagal mengambil foto: ${exception.message ?: exception.imageCaptureError}",
                             Toast.LENGTH_LONG
                         ).show()
                     }
                 }
-
-                override fun onError(exception: ImageCaptureException) {
-                    photoCaptureInProgress = false
-                    try { tempFile.delete() } catch (_: Exception) {}
-
-                    if (isFinishing || isDestroyed) return
-
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Gagal mengambil foto: ${exception.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        )
+            )
+        } catch (e: Exception) {
+            photoCaptureInProgress = false
+            try { photoFile.delete() } catch (_: Exception) {}
+            statusText.text = "PHOTO FAILED"
+            Toast.makeText(
+                this,
+                "Capture foto gagal: ${e.message ?: e.javaClass.simpleName}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
 
