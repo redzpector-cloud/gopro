@@ -657,13 +657,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         modeRow.addView(photoModeView,LinearLayout.LayoutParams(dp(112),dp(28)))
         bottomShade.addView(modeRow,LinearLayout.LayoutParams(-2,dp(28)))
 
-        val controls=FrameLayout(this)
+        val controls=FrameLayout(this).apply{setPadding(dp(4),dp(2),dp(4),dp(2))}
         val gallery=textView("▣",25f).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{showJejakCamGallery()}}
-        controls.addView(gallery,FrameLayout.LayoutParams(dp(40),dp(40),Gravity.START or Gravity.CENTER_VERTICAL))
+        controls.addView(gallery,FrameLayout.LayoutParams(dp(44),dp(44),Gravity.START or Gravity.CENTER_VERTICAL))
         recordButton=Button(this).apply{text="";background=getDrawable(R.drawable.bg_record);elevation=dp(7).toFloat();setOnClickListener{toggleRecording()}}
-        controls.addView(recordButton,FrameLayout.LayoutParams(dp(66),dp(66),Gravity.CENTER))
-        recordIcon=textView("●",27f,true).apply{setTextColor(0xFF111111.toInt());isClickable=false}
-        controls.addView(recordIcon,FrameLayout.LayoutParams(dp(66),dp(66),Gravity.CENTER))
+        controls.addView(recordButton,FrameLayout.LayoutParams(dp(72),dp(72),Gravity.CENTER))
+        recordIcon=textView("●",29f,true).apply{setTextColor(0xFF111111.toInt());isClickable=false}
+        controls.addView(recordIcon,FrameLayout.LayoutParams(dp(72),dp(72),Gravity.CENTER))
         // V22: GoPro-style lens/zoom presets. 0.5x switches to the widest rear camera
         // when the device exposes one; the other presets use CameraX digital zoom.
         val flip=textView("0.5×",16f,true).apply{
@@ -675,8 +675,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val close=textView("✕",18f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{closeCamera()}}
         hud.addView(close,FrameLayout.LayoutParams(dp(42),dp(42),Gravity.TOP or Gravity.END).apply{rightMargin=dp(10);topMargin=dp(52)})
-        controls.addView(flip,FrameLayout.LayoutParams(dp(40),dp(40),Gravity.END or Gravity.CENTER_VERTICAL))
-        bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(64)))
+        controls.addView(flip,FrameLayout.LayoutParams(dp(44),dp(44),Gravity.END or Gravity.CENTER_VERTICAL))
+        bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(72)))
 
         val lensRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         fun lensButton(label:String, ratio:Float): TextView = textView(label,10f,true).apply{
@@ -746,7 +746,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         quickRow.addView(quick,LinearLayout.LayoutParams(dp(80),dp(25)).apply{rightMargin=dp(4)});quickRow.addView(loop,LinearLayout.LayoutParams(dp(70),dp(25)).apply{leftMargin=dp(4);rightMargin=dp(4)});quickRow.addView(mic,LinearLayout.LayoutParams(dp(70),dp(25)).apply{leftMargin=dp(4)})
-        bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(25)))
+        bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(29)))
         hudViews["quickRow"] = quickRow
 
         val actionRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
@@ -768,9 +768,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         actionRow.addView(countdownBtn,LinearLayout.LayoutParams(dp(84),dp(24)).apply{rightMargin=dp(5)})
         actionRow.addView(pauseButton,LinearLayout.LayoutParams(dp(72),dp(24)).apply{leftMargin=dp(5)})
-        bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(24)))
+        bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(26)))
         hudViews["actionRow"] = actionRow
-        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(178),Gravity.BOTTOM))
+        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(188),Gravity.BOTTOM))
         hudViews["bottomControls"] = bottomShade
 
         root.addView(hud,FrameLayout.LayoutParams(-1,-1))
