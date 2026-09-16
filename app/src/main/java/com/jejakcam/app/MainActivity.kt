@@ -654,11 +654,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             photoModeView.setTextColor(Color.WHITE)
             photoModeView.alpha=.65f
         }
-        modeRow.addView(videoMode,LinearLayout.LayoutParams(dp(112),dp(28)))
-        val modeGap = Space(this).apply { minimumWidth = dp(18) }
-        modeRow.addView(modeGap,LinearLayout.LayoutParams(dp(18),dp(1)))
-        modeRow.addView(photoModeView,LinearLayout.LayoutParams(dp(112),dp(28)))
-        bottomShade.addView(modeRow,LinearLayout.LayoutParams(-2,dp(28)))
+        modeRow.addView(videoMode,LinearLayout.LayoutParams(dp(118),dp(30)))
+        val modeGap = Space(this).apply { minimumWidth = dp(24) }
+        modeRow.addView(modeGap,LinearLayout.LayoutParams(dp(24),dp(1)))
+        modeRow.addView(photoModeView,LinearLayout.LayoutParams(dp(118),dp(30)))
+        bottomShade.addView(modeRow,LinearLayout.LayoutParams(-2,dp(30)))
 
         val controls=FrameLayout(this).apply{setPadding(dp(4),dp(2),dp(4),dp(2))}
         val gallery=textView("▣",25f).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{showJejakCamGallery()}}
@@ -679,7 +679,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val close=textView("✕",18f,true).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{closeCamera()}}
         hud.addView(close,FrameLayout.LayoutParams(dp(42),dp(42),Gravity.TOP or Gravity.END).apply{rightMargin=dp(10);topMargin=dp(52)})
         controls.addView(flip,FrameLayout.LayoutParams(dp(44),dp(44),Gravity.END or Gravity.CENTER_VERTICAL))
-        bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(72)))
+        bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(76)))
 
         val lensRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
         fun lensButton(label:String, ratio:Float): TextView = textView(label,10f,true).apply{
@@ -690,7 +690,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         lensRow.addView(lensButton("1×",1f),LinearLayout.LayoutParams(dp(54),dp(26)).apply{rightMargin=dp(4)})
         lensRow.addView(lensButton("2×",2f),LinearLayout.LayoutParams(dp(54),dp(26)).apply{rightMargin=dp(4)})
         lensRow.addView(lensButton("4×",4f),LinearLayout.LayoutParams(dp(54),dp(26)))
-        bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(26)))
+        bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(28)))
         hudViews["lensRow"] = lensRow
 
         val quickRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
@@ -749,7 +749,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         quickRow.addView(quick,LinearLayout.LayoutParams(dp(80),dp(25)).apply{rightMargin=dp(4)});quickRow.addView(loop,LinearLayout.LayoutParams(dp(70),dp(25)).apply{leftMargin=dp(4);rightMargin=dp(4)});quickRow.addView(mic,LinearLayout.LayoutParams(dp(70),dp(25)).apply{leftMargin=dp(4)})
-        bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(29)))
+        bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(31)))
         hudViews["quickRow"] = quickRow
 
         val actionRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
@@ -771,9 +771,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         actionRow.addView(countdownBtn,LinearLayout.LayoutParams(dp(84),dp(24)).apply{rightMargin=dp(5)})
         actionRow.addView(pauseButton,LinearLayout.LayoutParams(dp(72),dp(24)).apply{leftMargin=dp(5)})
-        bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(26)))
+        bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(28)))
         hudViews["actionRow"] = actionRow
-        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(188),Gravity.BOTTOM))
+        hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(202),Gravity.BOTTOM))
         hudViews["bottomControls"] = bottomShade
 
         root.addView(hud,FrameLayout.LayoutParams(-1,-1))
