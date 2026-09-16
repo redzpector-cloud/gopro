@@ -1323,10 +1323,33 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val sessionId = ++recordingSessionId
         if (!gpsTrackRecording && gpsEnabled && segmentNumber == 1) beginGpsRecording()
-        val pending = r.prepareRecording(this, makeOutputOptions())
-        val prepared = if (audioEnabled && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            pending.withAudioEnabled()
-        } else pending
+        val micGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (audioEnabled && !micGranted) {
+            Toast.makeText(this, "Izin mikrofon belum aktif • aktifkan Mikrofon untuk merekam audio", Toast.LENGTH_LONG).show()
+            statusText.text = "MIC OFF / IZIN"
+            return
+        }
+
+        val pending = try {
+            r.prepareRecording(this, makeOutputOptions())
+        } catch (e: Throwable) {
+            Toast.makeText(this, "Tidak dapat menyiapkan rekaman: ${e.message ?: "error"}", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val prepared = if (audioEnabled && micGranted) {
+            try {
+                // V76: audio is explicitly attached to every video recording.
+                // Do not silently fall back to a silent video when the mic is enabled.
+                pending.withAudioEnabled()
+            } catch (e: Throwable) {
+                Toast.makeText(this, "Audio mikrofon gagal diaktifkan: ${e.message ?: "error"}", Toast.LENGTH_LONG).show()
+                statusText.text = "AUDIO ERROR"
+                return
+            }
+        } else {
+            pending
+        }
         recording = prepared.start(ContextCompat.getMainExecutor(this)) { event ->
             // V60: ignore callbacks belonging to a previous recording session.
             if (sessionId != recordingSessionId) return@start
