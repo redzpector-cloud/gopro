@@ -1289,6 +1289,28 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         return free > 256L * 1024L * 1024L && freePct > 1.0
     }
 
+    // V75: verify the finalized MediaStore item before reporting success.
+    // Long recordings can fail late even when CameraX reaches Finalize without
+    // an exception; never leave a zero-byte/broken item in the Gallery.
+    private fun verifyFinalizedVideo(uri: Uri): Boolean {
+        if (uri == Uri.EMPTY) return false
+        return try {
+            contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Video.Media.SIZE),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return false
+                val sizeIndex = cursor.getColumnIndex(MediaStore.Video.Media.SIZE)
+                sizeIndex >= 0 && cursor.getLong(sizeIndex) > 0L
+            } ?: false
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     private fun startSegment() {
         if (activityStopping || isFinishing || isDestroyed || !cameraActive) return
         val r = recorder ?: return
@@ -1360,6 +1382,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             }
                         } catch (_: Exception) { }
                         Toast.makeText(this, "Gagal menyimpan video: ${event.error}", Toast.LENGTH_LONG).show()
+                        recording = null
+                        recordingFinalizing = false
+                        lowStorageStopTriggered = false
+                        thermalStopTriggered = false
+                        stoppingForLoop = false
+                        stopRequestedByUser = false
+                        finishGpsRecording(saveTrack = true)
+                        resetRecordUi()
+                    } else if (!verifyFinalizedVideo(event.outputResults.outputUri)) {
+                        try {
+                            val badUri = event.outputResults.outputUri
+                            if (badUri != Uri.EMPTY) contentResolver.delete(badUri, null, null)
+                        } catch (_: Throwable) { }
+                        Toast.makeText(this, "Video selesai tetapi file tidak valid", Toast.LENGTH_LONG).show()
                         recording = null
                         recordingFinalizing = false
                         lowStorageStopTriggered = false
