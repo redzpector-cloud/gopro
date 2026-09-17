@@ -690,7 +690,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         lensRow.addView(lensButton("1×",1f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(6)})
         lensRow.addView(lensButton("2×",2f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(6)})
         lensRow.addView(lensButton("4×",4f),LinearLayout.LayoutParams(dp(58),dp(30)))
-        bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(30)).apply{bottomMargin=dp(3)})
+        bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(34)).apply{bottomMargin=dp(5)})
         hudViews["lensRow"] = lensRow
 
         val quickRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
@@ -748,8 +748,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
             }
         }
-        quickRow.addView(quick,LinearLayout.LayoutParams(dp(80),dp(25)).apply{rightMargin=dp(4)});quickRow.addView(loop,LinearLayout.LayoutParams(dp(70),dp(25)).apply{leftMargin=dp(4);rightMargin=dp(4)});quickRow.addView(mic,LinearLayout.LayoutParams(dp(70),dp(25)).apply{leftMargin=dp(4)})
-        bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(31)).apply{bottomMargin=dp(3)})
+        quickRow.addView(quick,LinearLayout.LayoutParams(dp(82),dp(27)).apply{rightMargin=dp(6)});quickRow.addView(loop,LinearLayout.LayoutParams(dp(74),dp(27)).apply{leftMargin=dp(3);rightMargin=dp(3)});quickRow.addView(mic,LinearLayout.LayoutParams(dp(74),dp(27)).apply{leftMargin=dp(6)})
+        bottomShade.addView(quickRow,LinearLayout.LayoutParams(-1,dp(33)).apply{bottomMargin=dp(4)})
         hudViews["quickRow"] = quickRow
 
         val actionRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
@@ -771,7 +771,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         actionRow.addView(countdownBtn,LinearLayout.LayoutParams(dp(84),dp(24)).apply{rightMargin=dp(5)})
         actionRow.addView(pauseButton,LinearLayout.LayoutParams(dp(72),dp(24)).apply{leftMargin=dp(5)})
-        bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(28)).apply{topMargin=dp(1)})
+        bottomShade.addView(actionRow,LinearLayout.LayoutParams(-1,dp(30)).apply{topMargin=dp(2)})
         hudViews["actionRow"] = actionRow
         hud.addView(bottomShade,FrameLayout.LayoutParams(-1,dp(222),Gravity.BOTTOM))
         hudViews["bottomControls"] = bottomShade
