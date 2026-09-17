@@ -459,7 +459,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V98  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V99  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -681,9 +681,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         controls.addView(flip,FrameLayout.LayoutParams(dp(48),dp(48),Gravity.END or Gravity.CENTER_VERTICAL))
         bottomShade.addView(controls,LinearLayout.LayoutParams(-1,dp(84)).apply{bottomMargin=dp(3)})
 
-        val lensRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER}
+        val lensRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER;setPadding(dp(6),dp(2),dp(6),dp(2))}
         fun lensButton(label:String, ratio:Float): TextView = textView(label,10f,true).apply{
             background=getDrawable(R.drawable.bg_control)
+            minHeight = dp(34)
+            setPadding(dp(6),0,dp(6),0)
             setOnClickListener{setLensPreset(ratio)}
         }
         lensRow.addView(lensButton("0.5×",0.5f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(6)})
