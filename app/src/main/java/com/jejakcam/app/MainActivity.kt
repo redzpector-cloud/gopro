@@ -459,7 +459,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeRow.addView(galleryHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         homeRow.addView(settingsHome, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         home.addView(homeRow, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
-        val version = textView("V91  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
+        val version = textView("V98  •  JEJAK TEKNISI", 10f).apply { alpha = .45f }
         home.addView(version, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(24) })
         homeScreen = home
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
@@ -527,7 +527,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background = getDrawable(R.drawable.bg_control)
             setOnClickListener { showSettings() }
         }
-        hud.addView(quickSettings, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.TOP or Gravity.END).apply { rightMargin=dp(12); topMargin=dp(52) })
+        hud.addView(quickSettings, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.TOP or Gravity.START).apply { leftMargin=dp(124); topMargin=dp(52) })
         hudViews["quickSettings"] = quickSettings
 
         statusText = textView("READY", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0) }
