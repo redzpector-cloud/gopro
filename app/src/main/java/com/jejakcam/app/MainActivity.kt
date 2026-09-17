@@ -565,11 +565,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val zoomPanel = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; gravity=Gravity.CENTER; background=getDrawable(R.drawable.bg_control); setPadding(dp(4),dp(4),dp(4),dp(4)) }
         val plus=Button(this).apply { text="+"; textSize=20f; setTextColor(Color.WHITE); background=getDrawable(R.drawable.bg_zoom); setOnClickListener{setZoom(.5f)} }
         val minus=Button(this).apply { text="−"; textSize=20f; setTextColor(Color.WHITE); background=getDrawable(R.drawable.bg_zoom); setOnClickListener{setZoom(-.5f)} }
-        zoomText=textView("1.0×",11f,true)
-        zoomPanel.addView(plus,LinearLayout.LayoutParams(dp(46),dp(46)))
-        zoomPanel.addView(zoomText,LinearLayout.LayoutParams(dp(46),dp(28)))
-        zoomPanel.addView(minus,LinearLayout.LayoutParams(dp(46),dp(46)))
-        hud.addView(zoomPanel,FrameLayout.LayoutParams(dp(58),dp(130),Gravity.END or Gravity.CENTER_VERTICAL).apply{rightMargin=dp(10)})
+        zoomText=textView("1.0×",12f,true).apply { background=getDrawable(R.drawable.bg_chip); alpha=1f }
+        zoomPanel.addView(plus,LinearLayout.LayoutParams(dp(50),dp(50)))
+        zoomPanel.addView(zoomText,LinearLayout.LayoutParams(dp(50),dp(32)))
+        zoomPanel.addView(minus,LinearLayout.LayoutParams(dp(50),dp(50)))
+        hud.addView(zoomPanel,FrameLayout.LayoutParams(dp(66),dp(144),Gravity.END or Gravity.CENTER_VERTICAL).apply{rightMargin=dp(12)})
         hudViews["zoom"] = zoomPanel
 
         val exposurePanel=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER;background=getDrawable(R.drawable.bg_control)}
@@ -686,10 +686,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background=getDrawable(R.drawable.bg_control)
             setOnClickListener{setLensPreset(ratio)}
         }
-        lensRow.addView(lensButton("0.5×",0.5f),LinearLayout.LayoutParams(dp(54),dp(26)).apply{rightMargin=dp(4)})
-        lensRow.addView(lensButton("1×",1f),LinearLayout.LayoutParams(dp(54),dp(26)).apply{rightMargin=dp(4)})
-        lensRow.addView(lensButton("2×",2f),LinearLayout.LayoutParams(dp(54),dp(26)).apply{rightMargin=dp(4)})
-        lensRow.addView(lensButton("4×",4f),LinearLayout.LayoutParams(dp(54),dp(26)))
+        lensRow.addView(lensButton("0.5×",0.5f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(6)})
+        lensRow.addView(lensButton("1×",1f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(6)})
+        lensRow.addView(lensButton("2×",2f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(6)})
+        lensRow.addView(lensButton("4×",4f),LinearLayout.LayoutParams(dp(58),dp(30)))
         bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(30)).apply{bottomMargin=dp(3)})
         hudViews["lensRow"] = lensRow
 
