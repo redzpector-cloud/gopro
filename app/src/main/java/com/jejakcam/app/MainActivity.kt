@@ -131,6 +131,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var exposureIndex = 0
     private var aeAfLockOn = false
     private var wideMode = false
+    private val lensPresetViews = mutableMapOf<Float, TextView>()
     private var horizonLockOn = true
     private var loopRecordingOn = true
     // V34: loop segment duration is selectable from the camera HUD.
@@ -687,11 +688,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             minHeight = dp(34)
             setPadding(dp(6),0,dp(6),0)
             setOnClickListener{setLensPreset(ratio)}
+            lensPresetViews[ratio] = this
         }
         lensRow.addView(lensButton("0.5×",0.5f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(6)})
         lensRow.addView(lensButton("1×",1f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(6)})
         lensRow.addView(lensButton("2×",2f),LinearLayout.LayoutParams(dp(58),dp(30)).apply{rightMargin=dp(6)})
         lensRow.addView(lensButton("4×",4f),LinearLayout.LayoutParams(dp(58),dp(30)))
+        updateLensPresetUi(1f)
         bottomShade.addView(lensRow,LinearLayout.LayoutParams(-1,dp(34)).apply{bottomMargin=dp(5)})
         hudViews["lensRow"] = lensRow
 
@@ -1424,7 +1427,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 startCamera(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
                 Toast.makeText(
                     this,
-                    if (wideMode) "WIDE / ULTRA-WIDE aktif" else "KAMERA UTAMA aktif",
+                    if (wideMode) { updateLensPresetUi(0.5f); "WIDE / ULTRA-WIDE aktif" } else { updateLensPresetUi(1f); "KAMERA UTAMA aktif" },
                     Toast.LENGTH_SHORT
                 ).show()
             } catch (_: Exception) {
@@ -1467,6 +1470,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
+    private fun updateLensPresetUi(ratio: Float) {
+        lensPresetViews.forEach { (value, view) ->
+            val selected = kotlin.math.abs(value - ratio) < 0.01f
+            view.background = getDrawable(if (selected) R.drawable.bg_mode_selected else R.drawable.bg_control)
+            view.setTextColor(if (selected) Color.BLACK else Color.WHITE)
+            view.alpha = if (selected) 1f else .72f
+        }
+    }
+
     private fun setZoomToPreset(ratio: Float) {
         val cam = camera ?: return
         val min = cam.cameraInfo.zoomState.value?.minZoomRatio ?: 1f
@@ -1474,6 +1486,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         zoomRatio = ratio.coerceIn(min, max)
         cam.cameraControl.setZoomRatio(zoomRatio)
         zoomText.text = String.format("%.1f×", zoomRatio)
+        updateLensPresetUi(ratio)
     }
 
     private fun setZoom(delta: Float) {
