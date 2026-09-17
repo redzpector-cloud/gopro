@@ -658,7 +658,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val modeGap = Space(this).apply { minimumWidth = dp(24) }
         modeRow.addView(modeGap,LinearLayout.LayoutParams(dp(24),dp(1)))
         modeRow.addView(photoModeView,LinearLayout.LayoutParams(dp(118),dp(30)))
-        bottomShade.addView(modeRow,LinearLayout.LayoutParams(-2,dp(32)).apply{bottomMargin=dp(3)}))
+        bottomShade.addView(modeRow,LinearLayout.LayoutParams(-2,dp(32)).apply{bottomMargin=dp(3)})
 
         val controls=FrameLayout(this).apply{setPadding(dp(8),dp(3),dp(8),dp(3))}
         val gallery=textView("▣",25f).apply{background=getDrawable(R.drawable.bg_control);setOnClickListener{showJejakCamGallery()}}
