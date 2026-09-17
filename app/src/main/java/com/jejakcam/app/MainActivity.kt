@@ -531,22 +531,26 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         hud.addView(quickSettings, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.TOP or Gravity.START).apply { leftMargin=dp(124); topMargin=dp(52) })
         hudViews["quickSettings"] = quickSettings
 
-        statusText = textView("READY", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); setPadding(dp(10),0,dp(10),0) }
-        hud.addView(statusText, FrameLayout.LayoutParams(dp(112), dp(28), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(52) })
+        statusText = textView("READY", 11f, true).apply {
+            background=getDrawable(R.drawable.bg_chip)
+            setPadding(dp(12),0,dp(12),0)
+            alpha = .94f
+        }
+        hud.addView(statusText, FrameLayout.LayoutParams(dp(124), dp(32), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(50) })
         hudViews["status"] = statusText
-        timerText = textView("00:00", 15f, true)
-        hud.addView(timerText, FrameLayout.LayoutParams(dp(94), dp(28), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(80) })
+        timerText = textView("00:00", 16f, true).apply { alpha = .96f }
+        hud.addView(timerText, FrameLayout.LayoutParams(dp(104), dp(32), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(82) })
         hudViews["timer"] = timerText
-        loopText = textView("SEG 01", 9f, true).apply { alpha = .72f }
-        hud.addView(loopText, FrameLayout.LayoutParams(dp(154), dp(22), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(106) })
+        loopText = textView("SEG 01", 9f, true).apply { alpha = .68f }
+        hud.addView(loopText, FrameLayout.LayoutParams(dp(168), dp(22), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(112) })
         hudViews["loopText"] = loopText
 
-        horizonText = textView("— LEVEL • SMOOTH —", 11f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.88f }
-        hud.addView(horizonText, FrameLayout.LayoutParams(dp(132), dp(28), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(130) })
+        horizonText = textView("— LEVEL • SMOOTH —", 10f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.78f }
+        hud.addView(horizonText, FrameLayout.LayoutParams(dp(132), dp(26), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(138) })
         hudViews["horizon"] = horizonText
 
-        tiltText = textView("ROLL 0°  •  PITCH 0°", 10f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.78f }
-        hud.addView(tiltText, FrameLayout.LayoutParams(dp(140), dp(26), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(158) })
+        tiltText = textView("ROLL 0°  •  PITCH 0°", 9f, true).apply { background=getDrawable(R.drawable.bg_chip); alpha=.68f }
+        hud.addView(tiltText, FrameLayout.LayoutParams(dp(140), dp(24), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin=dp(164) })
         hudViews["tilt"] = tiltText
 
         val horizonToggle = textView("HORIZON ON", 11f, true).apply {
